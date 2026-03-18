@@ -1,0 +1,22 @@
+---
+server:
+  port: 8081
+spring:
+  config:
+    activate:
+      on-profile: local
+---
+server:
+  port: 8082
+spring:
+  config:
+    activate:
+      on-profile: prodA, devA
+---
+server:
+  port: 8082
+spring:
+  config:
+    activate:
+      on-profile: prodB, devB
+---

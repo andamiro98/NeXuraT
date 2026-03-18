@@ -1,0 +1,104 @@
+spring:
+  config:
+    activate:
+      on-profile: local
+  jpa:
+    show-sql: false  # SQL 쿼리 로깅 설정 (필요에 따라 true로 변경 가능)
+    hibernate:
+      ddl-auto: validate  # 테이블을 자동으로 생성 및 업데이트
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        default_batch_fetch_size: 100  # 배치 가져오기 사이즈
+        format_sql: true  # SQL 쿼리 포맷팅
+        order_inserts: true  # INSERT 쿼리 순서 유지
+        order_updates: true  # UPDATE 쿼리 순서 유지
+        globally_quoted_identifiers: false
+        jdbc:
+          batch_size: 100  # 배치 처리 사이즈
+    open-in-view: false  # Open Session in View 비활성화
+
+#---
+#spring:
+#  config:
+#    activate:
+#      on-profile: local
+#  jpa:
+#    show-sql: false
+#    hibernate:
+#      ddl-auto: update
+#      naming:
+#        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+#    properties:
+#      hibernate:
+#        dialect: org.hibernate.dialect.MySQL8Dialect
+#        default_batch_fetch_size: 100
+#        format_sql: true
+#        order_inserts: true
+#        order_updates: true
+#        jdbc:
+#          batch_size: 100
+#    open-in-view: false
+#    database-platform: org.hibernate.dialect.MySQL8Dialect
+#decorator:
+#  datasource:
+#    p6spy:
+#      enable-logging: true
+#      multiline: true
+#---
+#spring:
+#  config:
+#    activate:
+#      on-profile: devA, devB
+#  jpa:
+#    show-sql: false
+#    hibernate:
+#      ddl-auto: none
+#      naming:
+#        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+#    properties:
+#      dialect: org.hibernate.dialect.MySQL8Dialect
+#      hibernate:
+#        default_batch_fetch_size: 100
+#        format_sql: true
+#        order_inserts: true
+#        order_updates: true
+#        jdbc:
+#          batch_size: 100
+#    open-in-view: false
+#    database-platform: kr.millionz.core.querydsl.MysqlCustomDialect
+#decorator:
+#  datasource:
+#    p6spy:
+#      enable-logging: true
+#      multiline: true
+#---
+#spring:
+#  config:
+#    activate:
+#      on-profile: prodA, prodB
+#  jpa:
+#    show-sql: true
+#    hibernate:
+#      ddl-auto: none
+#      naming:
+#        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+#    properties:
+#      dialect: org.hibernate.dialect.MySQL8Dialect
+#      hibernate:
+#        default_batch_fetch_size: 100
+#        format_sql: false
+#        order_inserts: true
+#        order_updates: true
+#        jdbc:
+#          batch_size: 100
+#    open-in-view: false
+#    database-platform: kr.millionz.core.querydsl.MysqlCustomDialect
+#decorator:
+#  datasource:
+#    p6spy:
+#      enable-logging: false
+#      multiline: true
+#---
