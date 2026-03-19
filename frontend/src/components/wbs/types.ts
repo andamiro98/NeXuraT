@@ -1,4 +1,3 @@
-
 // 업로드 후 화면 상단에 표시할 요약 정보
 export interface SummaryInfo {
     createdNodeCount: number;    // createdNodeCount: 실제 트리 노드로 생성된 개수
@@ -69,7 +68,7 @@ export interface GanttTaskItem {
     // SVAR Gantt가 이해할 수 있는 형태로 만든다.
 
     id: number;
-    parent: number;
+    parent?: number;
     open: boolean;
 
     // 간트에 표시될 작업명
@@ -78,6 +77,7 @@ export interface GanttTaskItem {
     // 시작일 / 종료일
     start: Date;
     end: Date;
+    duration?: number;
 
     // summary: 자식이 있는 그룹 작업
     // task: 일반 작업

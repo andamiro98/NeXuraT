@@ -1,331 +1,386 @@
-import { type ChangeEvent, useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import * as XLSX from "xlsx";
-import { Gantt, Willow } from "@svar-ui/react-gantt";
+import { Gantt, Willow, Editor } from "@svar-ui/react-gantt";
 import "@svar-ui/react-gantt/all.css";
 
-import TreeGrid from "../components/wbs/TreeGrid";
 import {
-    buildMergedHeaders,
-    buildNodeTree,
     findHeaderRowIndex,
-    flattenTreeToEditableRows,
+    buildMergedHeaders,
     resolveColumnIndexes,
+    buildNodeTree,
+    flattenTreeToEditableRows
 } from "../components/wbs/excelUtils";
 import {
     buildScheduledGanttData,
     computeDurationDays,
-    getCalendarRange,
-    getVisibleRows,
+    formatMoney,
+    getCalendarRangeFromRows,
+    toDateInputValue,
 } from "../components/wbs/scheduleUtils";
-import type {
-    EditableWbsRow,
-    ExcelRow,
-    SummaryInfo,
-} from "../components/wbs/types";
+import type { EditableWbsRow, SummaryInfo, RelationType } from "../components/wbs/types";
 
-// WBS 업로드 화면 전체를 담당
-// 왼쪽 트리, 오른쪽 간트, 상단 업로드 바까지 다 포함
+const MoneyCell = ({ val }: { val: any }) => {
+    return (
+        <div style={{ padding: "0 8px", width: "100%", textAlign: "right", color: "#6b7280" }}>
+            {val ? formatMoney(val) : "-"}
+        </div>
+    );
+};
+
+const DATE_INPUT_STYLE: React.CSSProperties = {
+    width: "100%",
+    height: 30,
+    border: "1px solid #d1d5db",
+    borderRadius: 4,
+    padding: "0 8px",
+    background: "#fff",
+    boxSizing: "border-box",
+    fontSize: 13,
+};
+
+function normalizeRelationType(value: unknown): RelationType {
+    if (value === "FS" || value === "FF" || value === "SS" || value === "SF") {
+        return value;
+    }
+    return "";
+}
+
 export default function WbsSvarGanttPage() {
-    // rows: 왼쪽 테이블에 표시되는 전체 데이터 + 입력 상태
     const [rows, setRows] = useState<EditableWbsRow[]>([]);
+    const [summary, setSummary] = useState<SummaryInfo>({ createdNodeCount: 0, ignoredDetailRows: 0 });
+    const [api, setApi] = useState<any>(null);
 
-    // 파일명 / 시트명 / 에러 / 요약 정보
-    const [fileName, setFileName] = useState("");
-    const [sheetName, setSheetName] = useState("");
-    const [error, setError] = useState("");
-    const [summary, setSummary] = useState<SummaryInfo>({
-        createdNodeCount: 0,
-        ignoredDetailRows: 0,
-    });
+    // SVAR Gantt 컴포넌트에 직접 전달할 데이터 (내부 상태 관리를 위해 별도 분리)
+    const [ganttData, setGanttData] = useState<{ tasks: any[]; links: any[] }>({ tasks: [], links: [] });
 
-    // 그리드 영역 너비 (마우스 드래그로 조절)
-    const [gridWidth, setGridWidth] = useState(1250);
-    const [isResizing, setIsResizing] = useState(false);
+    const rebuildFromRows = useCallback((nextRows: EditableWbsRow[]) => {
+        const { tasks, links } = buildScheduledGanttData(nextRows);
+        setGanttData({ tasks, links });
+        return nextRows;
+    }, []);
 
-    const handleMouseDown = (e: React.MouseEvent) => {
-        e.preventDefault();
-        setIsResizing(true);
-    };
+    const applyDateChange = useCallback(
+        (rowId: number, field: "startDate" | "endDate", rawValue: string) => {
+            setRows((prev) => {
+                const nextRows = prev.map((row) => {
+                    if (row.id !== rowId) return row;
 
-    const handleMouseMove = (e: React.MouseEvent) => {
-        if (!isResizing) return;
-        const newWidth = Math.max(400, Math.min(2000, e.clientX));
-        setGridWidth(newWidth);
-    };
+                    const nextRow: EditableWbsRow = {
+                        ...row,
+                        [field]: rawValue,
+                    };
 
-    const handleMouseUp = () => {
-        setIsResizing(false);
-    };
+                    nextRow.durationDays = computeDurationDays(nextRow.startDate, nextRow.endDate);
+                    return nextRow;
+                });
 
-    // 초기 캘린더 범위
-    const calendarRange = useMemo(() => getCalendarRange(), []);
-
-    // 오른쪽 캘린더 상단 눈금 설정
-    const ganttScales = [
-        { unit: "month", step: 1, format: "%Y-%m" },
-        { unit: "day", step: 1, format: "%d" },
-    ];
-
-    // 현재 트리 펼침/접힘 상태 기준으로 실제 화면에 보일 행들
-    const visibleRows = useMemo(() => getVisibleRows(rows), [rows]);
-
-    // 오른쪽 Gantt에 넘길 tasks/links
-    const scheduledData = useMemo(() => buildScheduledGanttData(rows), [rows]);
-
-    // 트리 토글
-    const handleToggle = (id: number) => {
-        setRows((prev) =>
-            prev.map((row) =>
-                row.id === id ? { ...row, open: !row.open } : row
-            )
-        );
-    };
-
-    // 입력값 변경
-    const handleRowChange = (
-        id: number,
-        field:
-            | "startDate"
-            | "endDate"
-            | "predecessorCode"
-            | "relationType"
-            | "lag",
-        value: string
-    ) => {
-        setRows((prev) =>
-            prev.map((row) => {
-                if (row.id !== id) return row;
-
-                // 변경된 필드만 업데이트
-                const nextRow: EditableWbsRow = {
-                    ...row,
-                    [field]:
-                        field === "lag"
-                            ? Number.isFinite(Number(value))
-                                ? Number(value)
-                                : 0
-                            : value,
-                } as EditableWbsRow;
-
-                // start/end가 바뀌면 duration도 재계산
-                nextRow.durationDays = computeDurationDays(
-                    nextRow.startDate,
-                    nextRow.endDate
-                );
-
-                return nextRow;
-            })
-        );
-    };
+                return rebuildFromRows(nextRows);
+            });
+        },
+        [rebuildFromRows]
+    );
 
     // 엑셀 업로드 처리
-    const handleFileChange = async (
-        event: ChangeEvent<HTMLInputElement>
-    ): Promise<void> => {
-        const file = event.target.files?.[0];
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
         if (!file) return;
 
-        try {
-            setError("");
-            setFileName(file.name);
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            const bstr = evt.target?.result;
+            const wb = XLSX.read(bstr, { type: "binary" });
+            const wsname = wb.SheetNames[0];
+            const ws = wb.Sheets[wsname];
+            const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-            // 브라우저에서 파일을 ArrayBuffer로 읽음
-            const arrayBuffer = await file.arrayBuffer();
+            try {
+                const headerIdx = findHeaderRowIndex(data as any[]);
+                if (headerIdx !== -1) {
+                    const headers = buildMergedHeaders(data[headerIdx] as any, data[headerIdx + 1] as any);
+                    const cols = resolveColumnIndexes(headers);
+                    const { roots, createdNodeCount, ignoredDetailRows } = buildNodeTree(data as any[], cols);
 
-            // XLSX 라이브러리로 workbook 생성
-            const workbook = XLSX.read(arrayBuffer, {
-                type: "array",
-                cellDates: false,
-                raw: true,
-            });
-
-            // 첫 번째 시트 사용
-            const firstSheetName = workbook.SheetNames[0];
-            setSheetName(firstSheetName);
-
-            const sheet = workbook.Sheets[firstSheetName];
-
-            // header:1 => 객체 배열이 아니라 2차원 배열로 읽음
-            const excelRows = XLSX.utils.sheet_to_json(sheet, {
-                header: 1,
-                raw: true,
-                defval: "",
-            }) as ExcelRow[];
-
-            // WBS Lv가 있는 헤더 행 찾기
-            const headerRowIndex = findHeaderRowIndex(excelRows);
-
-            if (headerRowIndex === -1) {
-                throw new Error(
-                    "헤더 행을 찾지 못했습니다. 'WBS Lv' 컬럼이 있는지 확인해주세요."
-                );
+                    const newRows = flattenTreeToEditableRows(roots).map((row) => ({
+                        ...row,
+                        startDate: toDateInputValue(row.startDate),
+                        endDate: toDateInputValue(row.endDate),
+                        durationDays: computeDurationDays(row.startDate, row.endDate),
+                    }));
+                    setRows(newRows);
+                    setSummary({ createdNodeCount, ignoredDetailRows });
+                    rebuildFromRows(newRows);
+                }
+            } catch (err) {
+                console.error("Excel Parsing Error", err);
             }
+        };
+        reader.readAsBinaryString(file);
+    };
 
-            // 2줄 헤더 추출
-            const topHeaderRow = excelRows[headerRowIndex] ?? [];
-            const bottomHeaderRow = excelRows[headerRowIndex + 1] ?? [];
+    const calendarRange = useMemo(() => getCalendarRangeFromRows(rows), [rows]);
 
-            // 실제 데이터 행
-            const dataRows = excelRows.slice(headerRowIndex + 2);
+    const resolveScaleDate = (...args: any[]): Date | null => {
+        for (const arg of args) {
+            if (arg instanceof Date && !Number.isNaN(arg.getTime())) return arg;
+        }
+        for (const arg of args) {
+            const parsed = new Date(arg);
+            if (!Number.isNaN(parsed.getTime())) return parsed;
+        }
+        return null;
+    };
 
-            // 헤더 병합 후 컬럼 위치 찾기
-            const mergedHeaders = buildMergedHeaders(topHeaderRow, bottomHeaderRow);
-            const columnIndexes = resolveColumnIndexes(mergedHeaders);
+    const ganttScales = useMemo(() => [
+        {
+            unit: "month",
+            step: 1,
+            format: (...args: any[]) => {
+                const date = resolveScaleDate(...args);
+                if (!date) return "";
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, "0");
+                return `${year}년 ${month}월`;
+            },
+        },
+        {
+            unit: "day",
+            step: 1,
+            format: (...args: any[]) => {
+                const date = resolveScaleDate(...args);
+                if (!date) return "";
+                return String(date.getDate());
+            },
+        }
+    ], []);
 
-            // WBS Lv 기반 트리 생성
-            const { roots, createdNodeCount, ignoredDetailRows } = buildNodeTree(
-                dataRows,
-                columnIndexes
-            );
+    // Svar 내장 트리 그리드 커스텀 컬럼 정의
+    const columns: any[] = useMemo(() => [
+        { id: "text", header: "공종명", width: 250 },
+        { id: "wbsCode", header: "WBS Code", width: 100 },
+        {
+            id: "start",
+            header: "착수일",
+            width: 132,
+            align: "center",
+            cell: ({ row }: any) => (
+                <input
+                    type="date"
+                    value={toDateInputValue(row.startDate ?? row.start)}
+                    onChange={(e) => applyDateChange(row.id, "startDate", e.target.value)}
+                    style={DATE_INPUT_STYLE}
+                />
+            ),
+        },
+        {
+            id: "end",
+            header: "종료일",
+            width: 132,
+            align: "center",
+            cell: ({ row }: any) => (
+                <input
+                    type="date"
+                    value={toDateInputValue(row.endDate ?? row.end)}
+                    onChange={(e) => applyDateChange(row.id, "endDate", e.target.value)}
+                    style={DATE_INPUT_STYLE}
+                />
+            ),
+        },
+        {
+            id: "duration",
+            header: "기간(일)",
+            width: 80,
+            align: "center",
+            cell: ({ row }: any) => row.durationDays ?? row.duration ?? "-",
+        },
+        { id: "predecessorCode", header: "선행작업", width: 90, editor: "text" },
+        {
+            id: "relationType",
+            header: "관계유형",
+            width: 90,
+            editor: {
+                type: "combo",
+                config: {
+                    options: [
+                        { id: "", label: "-" },
+                        { id: "FS", label: "FS" },
+                        { id: "FF", label: "FF" },
+                        { id: "SS", label: "SS" },
+                        { id: "SF", label: "SF" }
+                    ]
+                }
+            }
+        },
+        { id: "lag", header: "간격(Lag)", width: 80, editor: "text" },
+        { id: "materialAmount", header: "재료비", width: 100, cell: ({ row }: any) => <MoneyCell val={row.materialAmount} /> },
+        { id: "laborAmount", header: "노무비", width: 100, cell: ({ row }: any) => <MoneyCell val={row.laborAmount} /> },
+        { id: "expenseAmount", header: "경비", width: 100, cell: ({ row }: any) => <MoneyCell val={row.expenseAmount} /> },
+        { id: "totalAmount", header: "합계금액", width: 100, cell: ({ row }: any) => <MoneyCell val={row.totalAmount} /> }
+    ], [applyDateChange]);
 
-            // 화면용 행 배열로 변환
-            setRows(flattenTreeToEditableRows(roots));
+    const handleAddTask = () => {
+        if (!api) return;
+        const selected = api.getState().selected;
+        api.exec("add-task", {
+            task: {
+                text: "새 공종",
+                start: new Date(),
+                end: new Date(),
+                duration: 1,
+                predecessorCode: "",
+                relationType: "",
+                lag: 0,
+            },
+            target: selected?.[0],
+            mode: "after",
+        });
+    };
 
-            // 상단 요약 정보 갱신
-            setSummary({
-                createdNodeCount,
-                ignoredDetailRows,
-            });
-        } catch (e) {
-            // 에러 나면 상태 초기화
-            setRows([]);
-            setSummary({
-                createdNodeCount: 0,
-                ignoredDetailRows: 0,
-            });
-
-            setError(
-                e instanceof Error
-                    ? e.message
-                    : "엑셀 파일을 읽는 중 오류가 발생했습니다."
-            );
+    const handleDeleteTask = () => {
+        if (!api) return;
+        const selected = api.getState().selected;
+        if (selected) {
+            selected.forEach((id: number | string) => api.exec("delete-task", { id }));
         }
     };
 
+    useEffect(() => {
+        if (!api) return;
+
+        const handleUpdate = (ev: any) => {
+            const { id, task, inProgress } = ev;
+            if (inProgress || !task) return;
+
+            setRows((prev) => {
+                const newRows = prev.map((row) => {
+                    if (row.id !== id) return row;
+
+                    const nextRow: EditableWbsRow = { ...row };
+
+                    const nextStartDate = task.start !== undefined
+                        ? toDateInputValue(task.start)
+                        : row.startDate;
+                    const nextEndDate = task.end !== undefined
+                        ? toDateInputValue(task.end)
+                        : row.endDate;
+
+                    nextRow.startDate = nextStartDate;
+                    nextRow.endDate = nextEndDate;
+                    nextRow.durationDays = computeDurationDays(nextStartDate, nextEndDate);
+
+                    if (task.text !== undefined) nextRow.workName = String(task.text ?? "");
+                    if (task.predecessorCode !== undefined) nextRow.predecessorCode = String(task.predecessorCode ?? "").trim();
+                    if (task.relationType !== undefined) nextRow.relationType = normalizeRelationType(task.relationType);
+                    if (task.lag !== undefined) nextRow.lag = Number(task.lag) || 0;
+
+                    return nextRow;
+                });
+
+                return rebuildFromRows(newRows);
+            });
+        };
+
+        const handleAdd = (ev: any) => {
+            const task = ev?.task;
+            if (!task || task.id == null) return;
+
+            setRows((prev) => {
+                if (prev.some((row) => row.id === task.id)) return prev;
+
+                const startDate = toDateInputValue(task.start ?? new Date());
+                const endDate = toDateInputValue(task.end ?? task.start ?? new Date());
+                const newRow: EditableWbsRow = {
+                    id: Number(task.id),
+                    parentId: task.parent ? Number(task.parent) : 0,
+                    level: 0,
+                    hasChildren: false,
+                    open: true,
+                    workName: String(task.text ?? "새 공종"),
+                    wbsCode: "",
+                    totalAmount: 0,
+                    materialAmount: 0,
+                    laborAmount: 0,
+                    expenseAmount: 0,
+                    startDate,
+                    endDate,
+                    durationDays: computeDurationDays(startDate, endDate),
+                    predecessorCode: String(task.predecessorCode ?? ""),
+                    relationType: normalizeRelationType(task.relationType),
+                    lag: Number(task.lag) || 0,
+                };
+
+                return rebuildFromRows([...prev, newRow]);
+            });
+        };
+
+        const handleDelete = (ev: any) => {
+            const id = ev?.id;
+            if (id == null) return;
+
+            setRows((prev) => {
+                const nextRows = prev.filter((row) => row.id !== id && row.parentId !== id);
+                return rebuildFromRows(nextRows);
+            });
+        };
+
+        api.on("update-task", handleUpdate);
+        api.on("add-task", handleAdd);
+        api.on("delete-task", handleDelete);
+
+        return () => {
+            api.off("update-task", handleUpdate);
+            api.off("add-task", handleAdd);
+            api.off("delete-task", handleDelete);
+        };
+    }, [api, rebuildFromRows]);
+
     return (
-        <Willow>
-            <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
-                {/* 상단 바 */}
-                <div
-                    style={{
-                        padding: 16,
-                        borderBottom: "1px solid #e5e7eb",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 12,
-                        background: "#fff",
-                    }}
-                >
-                    <div
-                        style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 12,
-                            flexWrap: "wrap",
-                        }}
-                    >
-                        {/* 파일 업로드 버튼 */}
-                        <label
-                            style={{
-                                background: "#111827",
-                                color: "#fff",
-                                padding: "10px 14px",
-                                borderRadius: 12,
-                                cursor: "pointer",
-                                fontWeight: 600,
-                            }}
-                        >
-                            엑셀 업로드
-                            <input
-                                type="file"
-                                accept=".xlsx,.xls"
-                                style={{ display: "none" }}
-                                onChange={handleFileChange}
-                            />
-                        </label>
-
-                        <div>파일: {fileName || "-"}</div>
-                        <div>시트: {sheetName || "-"}</div>
-                        <div>트리 노드: {summary.createdNodeCount}개</div>
-                        <div>무시된 "내역": {summary.ignoredDetailRows}개</div>
-                        <div>일정 생성: {scheduledData.tasks.length}개</div>
-                    </div>
-
-                    <div style={{ fontSize: 13, color: "#6b7280" }}>
-                        착수일과 종료일만 선택해도 간트가 생성됩니다.
-                    </div>
-
-                    {error && (
-                        <div style={{ color: "#dc2626", fontSize: 14 }}>{error}</div>
+        <div style={{ display: "flex", flexDirection: "column", height: "100vh", backgroundColor: "#f9fafb" }}>
+            <div style={{ padding: "16px 24px", backgroundColor: "#fff", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+                    <h2 style={{ fontSize: "1.25rem", fontWeight: "bold", margin: 0 }}>Gantt Chart (SVAR Native)</h2>
+                    <input
+                        type="file"
+                        accept=".xlsx, .xls"
+                        onChange={handleFileUpload}
+                        style={{ border: "1px solid #d1d5db", borderRadius: "4px", padding: "4px" }}
+                    />
+                    {summary.createdNodeCount > 0 && (
+                        <span style={{ fontSize: "0.875rem", color: "#6b7280" }}>
+                            생성된 공종 수: {summary.createdNodeCount}
+                        </span>
                     )}
                 </div>
-
-                <div
-                    onMouseMove={handleMouseMove}
-                    onMouseUp={handleMouseUp}
-                    onMouseLeave={handleMouseUp}
-                    style={{
-                        flex: 1,
-                        minHeight: 0,
-                        display: "flex",
-                        position: "relative",
-                        userSelect: isResizing ? "none" : "auto",
-                        cursor: isResizing ? "col-resize" : "default",
-                    }}
-                >
-                    {rows.length === 0 ? (
-                        <div
-                            style={{
-                                flex: 1,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                background: "#f8fafc",
-                                color: "#6b7280",
-                                fontSize: 15,
-                            }}
-                        >
-                            엑셀 파일을 업로드하면 WBS 트리와 캘린더가 표시됩니다.
-                        </div>
-                    ) : (
-                        <>
-                            {/* 왼쪽: 우리가 직접 만든 TreeGrid */}
-                            <div style={{ width: gridWidth, flexShrink: 0, overflow: "hidden" }}>
-                                <TreeGrid
-                                    rows={visibleRows}
-                                    onToggle={handleToggle}
-                                    onChange={handleRowChange}
-                                />
-                            </div>
-
-                            {/* 스플리터 (드래그 영역) */}
-                            <div
-                                onMouseDown={handleMouseDown}
-                                style={{
-                                    width: 6,
-                                    cursor: "col-resize",
-                                    background: isResizing ? "#3b82f6" : "#e5e7eb",
-                                    zIndex: 10,
-                                    transition: "background 0.2s",
-                                }}
-                            />
-
-                            {/* 오른쪽: SVAR Gantt */}
-                            <div style={{ flex: 1, minWidth: 0, height: "100%" }}>
-                                <Gantt
-                                    columns={false as unknown as any}
-                                    tasks={scheduledData.tasks as any}
-                                    links={scheduledData.links as any}
-                                    scales={ganttScales}
-                                    start={calendarRange.start}
-                                    end={calendarRange.end}
-                                    cellWidth={36}
-                                />
-                            </div>
-                        </>
-                    )}
+                <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+                    <span style={{ fontSize: "0.875rem", color: "#6b7280" }}>
+                        전체 항목 수: {rows.length}
+                    </span>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                        <button onClick={handleAddTask} style={{ padding: "8px 16px", backgroundColor: "#3b82f6", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}>
+                            + 작업 추가
+                        </button>
+                        <button onClick={handleDeleteTask} style={{ padding: "8px 16px", backgroundColor: "#ef4444", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}>
+                            - 선택 삭제
+                        </button>
+                    </div>
                 </div>
             </div>
-        </Willow>
+
+            <div style={{ flex: 1, minHeight: 0, padding: 16 }}>
+                <div style={{ height: "100%", borderRadius: "8px", overflow: "hidden", border: "1px solid #e5e7eb", background: "#fff" }}>
+                    <Willow>
+                        <Gantt
+                            init={setApi}
+                            tasks={ganttData.tasks}
+                            links={ganttData.links}
+                            columns={columns}
+                            scales={ganttScales}
+                            start={calendarRange.start}
+                            end={calendarRange.end}
+                        />
+                        {api && <Editor api={api} />}
+                    </Willow>
+                </div>
+            </div>
+        </div>
     );
 }

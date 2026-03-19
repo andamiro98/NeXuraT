@@ -1,0 +1,10 @@
+﻿src/pages/WbsSvarGanttPage.tsx(6,35): error TS2307: Cannot find module './excelUtils' or its corresponding type declarations.
+src/pages/WbsSvarGanttPage.tsx(7,72): error TS2307: Cannot find module './scheduleUtils' or its corresponding type declarations.
+src/pages/WbsSvarGanttPage.tsx(8,50): error TS2307: Cannot find module './types' or its corresponding type declarations.
+src/pages/WbsSvarGanttPage.tsx(120,29): error TS2322: Type '({ id: string; header: string; width: number; editor: string; align?: undefined; cell?: undefined; } | { id: string; header: string; width: number; align: string; editor: string; cell?: undefined; } | { id: string; ... 4 more ...; align?: undefined; } | { ...; })[]' is not assignable to type '((false | IColumnConfig[]) & IGanttColumn[]) | undefined'.
+  Type '({ id: string; header: string; width: number; editor: string; align?: undefined; cell?: undefined; } | { id: string; header: string; width: number; align: string; editor: string; cell?: undefined; } | { id: string; ... 4 more ...; align?: undefined; } | { ...; })[]' is not assignable to type 'IColumnConfig[] & IGanttColumn[]'.
+    Type '({ id: string; header: string; width: number; editor: string; align?: undefined; cell?: undefined; } | { id: string; header: string; width: number; align: string; editor: string; cell?: undefined; } | { id: string; ... 4 more ...; align?: undefined; } | { ...; })[]' is not assignable to type 'IColumnConfig[]'.
+      Type '{ id: string; header: string; width: number; editor: string; align?: undefined; cell?: undefined; } | { id: string; header: string; width: number; align: string; editor: string; cell?: undefined; } | { id: string; ... 4 more ...; align?: undefined; } | { ...; }' is not assignable to type 'IColumnConfig'.
+        Type '{ id: string; header: string; width: number; editor: string; align?: undefined; cell?: undefined; }' is not assignable to type 'IColumnConfig'.
+          Types of property 'editor' are incompatible.
+            Type 'string' is not assignable to type 'TEditorType | IColumnEditorConfig | TEditorHandlerConfig | undefined'.
