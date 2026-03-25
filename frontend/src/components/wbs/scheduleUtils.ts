@@ -4,9 +4,9 @@ import type {
     GanttTaskItem,
     RelationType,
 } from "./types";
+import { countBusinessDays, isBusinessDay } from "korean-holidays";
 
 const DAY_MS = 1000 * 60 * 60 * 24;
-
 function isValidDate(date: Date): boolean {
     return !Number.isNaN(date.getTime());
 }
@@ -27,8 +27,8 @@ export function toDateInputValue(value: string | Date | null | undefined): strin
     return `${year}-${month}-${day}`;
 }
 
-// 착수일~종료일 차이를 "일수"로 계산
-// 같은 날 시작/종료하면 1일로 본다.
+// 착수일~종료일 차이를 영업일(주말, 공휴일 제외) 기준으로 "일수"로 계산
+// 같은 날 시작/종료하면 1일로 본다 (해당 일이 영업일인 경우).
 export function computeDurationDays(
     startDate: string,
     endDate: string
@@ -43,6 +43,27 @@ export function computeDurationDays(
     const diffMs = endOnly.getTime() - startOnly.getTime();
     if (diffMs < 0) return null;
 
+    const bizBetween = countBusinessDays(startOnly, endOnly);
+    const startBiz = isBusinessDay(startOnly) ? 1 : 0;
+    
+    return bizBetween + startBiz;
+}
+
+
+export function computeGanttDurationDays(
+    startDate: string,
+    endDate: string
+): number | null {
+    const start = toSafeDate(startDate);
+    const end = toSafeDate(endDate);
+
+    if (!start || !end) return null;
+
+    const startOnly = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const endOnly = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    const diffMs = endOnly.getTime() - startOnly.getTime();
+    if (diffMs < 0) return null;
+    
     return Math.floor(diffMs / DAY_MS) + 1;
 }
 
@@ -122,13 +143,18 @@ export function buildScheduledGanttData(rows: EditableWbsRow[]): {
             toDateInputValue(parsedStart),
             toDateInputValue(parsedEnd)
         );
+        const durationGanttDays = computeGanttDurationDays(
+            toDateInputValue(parsedStart),
+            toDateInputValue(parsedEnd)
+        );
+    
 
         const taskItem: GanttTaskItem = {
             id: row.id,
             text: row.workName || "Untitled",
             start: parsedStart,
             end: parsedEnd,
-            duration: durationDays ?? 1,
+            duration: durationGanttDays ?? 1,
             type: "task",
             open: row.open,
 
