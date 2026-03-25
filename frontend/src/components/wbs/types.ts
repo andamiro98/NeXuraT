@@ -18,6 +18,12 @@ export interface NodeTreeItem {
     materialAmount: number;
     laborAmount: number;
     expenseAmount: number;
+    // 관련 일정 정보 (엑셀에서 바로 읽은 값, string 위주)
+    durationDays: string | null; // 엑셀의 기간 컨텐츠 원본 문자열
+    predecessorCode: string;
+    relationType: string;
+    lag: string;
+    duration: string; // 기간 컨텀츠 카피 (혼용 방지를 위한 별도 필드)
 
     // 자식 노드 배열
     children: NodeTreeItem[];
@@ -55,12 +61,23 @@ export interface EditableWbsRow {
     // 사용자가 입력하는 일정 정보
     startDate: string;
     endDate: string;
-    durationDays: number | null;
+    durationDays: string | null;
+    duration: string;
 
     // 선행작업 / 관계유형 / Lag
     predecessorCode: string;
-    relationType: RelationType;
-    lag: number;
+    relationType: string;
+    lag: string;
+
+
+    // CPM 계산 결과 (CPM 계산 버튼 클릭 후 채워짐)
+    es?: number;
+    ef?: number;
+    ls?: number;
+    lf?: number;
+    tf?: number;
+    ff?: number;
+    isCritical?: boolean;
 }
 
 export interface GanttTaskItem {
@@ -94,7 +111,16 @@ export interface GanttTaskItem {
     durationDays?: number | null;
     predecessorCode?: string;
     relationType?: string;
-    lag?: number;
+    lag?: string | number;
+
+    // CPM 결과
+    es?: number;
+    ef?: number;
+    ls?: number;
+    lf?: number;
+    tf?: number;
+    ff?: number;
+    isCritical?: boolean;
 }
 
 export interface GanttLinkItem {

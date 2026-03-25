@@ -71,14 +71,15 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
 
     const handleChange = (field: keyof EditableWbsRow, value: any) => {
         const updates: Partial<EditableWbsRow> = { [field]: value };
-        
+
         // If dates mutate, recalculate duration
         if (field === "startDate" || field === "endDate") {
             const newStart = field === "startDate" ? value : row.startDate;
             const newEnd = field === "endDate" ? value : row.endDate;
-            updates.durationDays = computeDurationDays(newStart, newEnd);
+            const dur = computeDurationDays(newStart, newEnd);
+            updates.durationDays = dur != null ? String(dur) : null;
         }
-        
+
         onUpdateRow(row.id, updates);
     };
 
@@ -116,7 +117,7 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
                 borderBottom: "1px solid #e5e7eb"
             }}>
                 <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "600", color: "#374151" }}>작업 상세 정보</h3>
-                <button 
+                <button
                     onClick={handleClose}
                     style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "#6b7280" }}
                 >
@@ -125,12 +126,12 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
             </div>
 
             <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
-                
+
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                     <label style={{ fontSize: "12px", color: "#6b7280", fontWeight: "600" }}>공종명 (Name)</label>
-                    <input 
-                        type="text" 
-                        value={row.workName || ""} 
+                    <input
+                        type="text"
+                        value={row.workName || ""}
                         onChange={(e) => handleChange("workName", e.target.value)}
                         style={{ padding: "8px", border: "1px solid #d1d5db", borderRadius: "4px", fontSize: "14px" }}
                     />
@@ -138,9 +139,9 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                     <label style={{ fontSize: "12px", color: "#6b7280", fontWeight: "600" }}>착수일 (Start Date)</label>
-                    <input 
-                        type="date" 
-                        value={row.startDate || ""} 
+                    <input
+                        type="date"
+                        value={row.startDate || ""}
                         onChange={(e) => handleChange("startDate", e.target.value)}
                         style={{ padding: "8px", border: "1px solid #d1d5db", borderRadius: "4px", fontSize: "14px" }}
                     />
@@ -148,9 +149,9 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                     <label style={{ fontSize: "12px", color: "#6b7280", fontWeight: "600" }}>종료일 (End Date)</label>
-                    <input 
-                        type="date" 
-                        value={row.endDate || ""} 
+                    <input
+                        type="date"
+                        value={row.endDate || ""}
                         onChange={(e) => handleChange("endDate", e.target.value)}
                         style={{ padding: "8px", border: "1px solid #d1d5db", borderRadius: "4px", fontSize: "14px" }}
                     />
@@ -158,11 +159,11 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                     <label style={{ fontSize: "12px", color: "#6b7280", fontWeight: "600" }}>기간 (Duration, 영업일 기준)</label>
-                    <div style={{ 
-                        padding: "8px", 
-                        backgroundColor: "#f3f4f6", 
-                        border: "1px solid #d1d5db", 
-                        borderRadius: "4px", 
+                    <div style={{
+                        padding: "8px",
+                        backgroundColor: "#f3f4f6",
+                        border: "1px solid #d1d5db",
+                        borderRadius: "4px",
                         fontSize: "14px",
                         color: "#374151"
                     }}>
@@ -172,9 +173,9 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                     <label style={{ fontSize: "12px", color: "#6b7280", fontWeight: "600" }}>선행 작업 (Predecessor)</label>
-                    <input 
-                        type="text" 
-                        value={row.predecessorCode || ""} 
+                    <input
+                        type="text"
+                        value={row.predecessorCode || ""}
                         onChange={(e) => handleChange("predecessorCode", e.target.value)}
                         style={{ padding: "8px", border: "1px solid #d1d5db", borderRadius: "4px", fontSize: "14px" }}
                         placeholder="e.g. A01"
@@ -183,8 +184,8 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                     <label style={{ fontSize: "12px", color: "#6b7280", fontWeight: "600" }}>관계 유형 (Relation Type)</label>
-                    <select 
-                        value={row.relationType || ""} 
+                    <select
+                        value={row.relationType || ""}
                         onChange={(e) => handleChange("relationType", e.target.value)}
                         style={{ padding: "8px", border: "1px solid #d1d5db", borderRadius: "4px", fontSize: "14px", backgroundColor: "#fff" }}
                     >
@@ -198,9 +199,9 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                     <label style={{ fontSize: "12px", color: "#6b7280", fontWeight: "600" }}>간격 (Lag)</label>
-                    <input 
-                        type="number" 
-                        value={row.lag || 0} 
+                    <input
+                        type="text"
+                        value={row.lag || 0}
                         onChange={(e) => handleChange("lag", Number(e.target.value))}
                         style={{ padding: "8px", border: "1px solid #d1d5db", borderRadius: "4px", fontSize: "14px" }}
                     />

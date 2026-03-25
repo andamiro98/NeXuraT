@@ -45,7 +45,7 @@ export function computeDurationDays(
 
     const bizBetween = countBusinessDays(startOnly, endOnly);
     const startBiz = isBusinessDay(startOnly) ? 1 : 0;
-    
+
     return bizBetween + startBiz;
 }
 
@@ -63,7 +63,7 @@ export function computeGanttDurationDays(
     const endOnly = new Date(end.getFullYear(), end.getMonth(), end.getDate());
     const diffMs = endOnly.getTime() - startOnly.getTime();
     if (diffMs < 0) return null;
-    
+
     return Math.floor(diffMs / DAY_MS) + 1;
 }
 
@@ -147,7 +147,7 @@ export function buildScheduledGanttData(rows: EditableWbsRow[]): {
             toDateInputValue(parsedStart),
             toDateInputValue(parsedEnd)
         );
-    
+
 
         const taskItem: GanttTaskItem = {
             id: row.id,
@@ -169,6 +169,14 @@ export function buildScheduledGanttData(rows: EditableWbsRow[]): {
             predecessorCode: row.predecessorCode,
             relationType: row.relationType,
             lag: row.lag,
+
+            es: row.es,
+            ef: row.ef,
+            ls: row.ls,
+            lf: row.lf,
+            tf: row.tf,
+            ff: row.ff,
+            isCritical: row.isCritical
         };
 
         if (row.parentId !== 0 && row.parentId != null) {

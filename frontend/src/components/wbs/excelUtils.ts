@@ -95,12 +95,19 @@ export function resolveColumnIndexes(headers: string[]) {
         materialAmount: findIndex("재료비금액"),
         laborAmount: findIndex("노무비금액"),
         expenseAmount: findIndex("경비금액"),
+        // 추가(PDM 로직 테스트)
+        predecessorCode: findIndex("선행작업"),
+        lag: findIndex("간격"),
+        relationType: findIndex("관계유형"),
+        duration: findIndex("기간"),
     };
 
     // 필수 컬럼이 없으면 즉시 에러를 발생시킨다.
     // 에러를 빨리 내야 이후 로직에서 더 큰 문제를 막을 수 있다.
+    // 단, 선행작업/관계유형/간격/기간 같은 선택 컬럼은 없어도 괜찮다.
+    const requiredColumnKeys = ["wbsLevel", "wbsCode", "workName"];
     const missingColumns = Object.entries(columnIndexes)
-        .filter(([, index]) => index === -1)
+        .filter(([key, index]) => index === -1 && requiredColumnKeys.includes(key))
         .map(([key]) => key);
 
     if (missingColumns.length > 0) {
@@ -157,6 +164,13 @@ export function buildNodeTree(
             laborAmount: toNumber(row[columnIndexes.laborAmount]),
             expenseAmount: toNumber(row[columnIndexes.expenseAmount]),
             children: [],
+
+            // 추가(PDM 로직 테스트)
+            predecessorCode: cleanText(row[columnIndexes.predecessorCode]),
+            lag: cleanText(row[columnIndexes.lag]),
+            relationType: cleanText(row[columnIndexes.relationType]),
+            duration: cleanText(row[columnIndexes.duration]),
+            durationDays: cleanText(row[columnIndexes.duration]) || null,
         };
 
         // level 1이면 루트 노드
@@ -216,11 +230,13 @@ export function flattenTreeToEditableRows(roots: NodeTreeItem[]): EditableWbsRow
 
             startDate: "",
             endDate: "",
-            durationDays: null,
+            // durationDays: null,
 
-            predecessorCode: "",
-            relationType: "",
-            lag: 0,
+            durationDays: node.duration || null,
+            duration: node.duration,
+            predecessorCode: node.predecessorCode,
+            relationType: node.relationType,
+            lag: node.lag,
         });
 
         // DFS(깊이 우선 탐색) 방식으로 자식들을 순서대로 펼친다.
