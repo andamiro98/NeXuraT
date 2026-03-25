@@ -87,18 +87,24 @@ export default function WbsSvarGanttPage() {
 
         const reader = new FileReader();
         reader.onload = (evt) => {
-            const bstr = evt.target?.result;
-            const wb = XLSX.read(bstr, { type: "binary" });
+            const result = evt.target?.result;
+            if (!(result instanceof ArrayBuffer)) {
+                console.error("Excel Parsing Error", new Error("Failed to read file as ArrayBuffer"));
+                return;
+            }
+
+            const data = new Uint8Array(result);
+            const wb = XLSX.read(data, { type: "array" });
             const wsname = wb.SheetNames[0];
             const ws = wb.Sheets[wsname];
-            const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+            const sheetData = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
             try {
-                const headerIdx = findHeaderRowIndex(data as any[]);
+                const headerIdx = findHeaderRowIndex(sheetData as any[]);
                 if (headerIdx !== -1) {
-                    const headers = buildMergedHeaders(data[headerIdx] as any, data[headerIdx + 1] as any);
+                    const headers = buildMergedHeaders(sheetData[headerIdx] as any, sheetData[headerIdx + 1] as any);
                     const cols = resolveColumnIndexes(headers);
-                    const { roots, createdNodeCount, ignoredDetailRows } = buildNodeTree(data as any[], cols);
+                    const { roots, createdNodeCount, ignoredDetailRows } = buildNodeTree(sheetData as any[], cols);
 
                     const newRows = flattenTreeToEditableRows(roots).map((row) => ({
                         ...row,
@@ -114,7 +120,7 @@ export default function WbsSvarGanttPage() {
                 console.error("Excel Parsing Error", err);
             }
         };
-        reader.readAsBinaryString(file);
+        reader.readAsArrayBuffer(file);
     };
 
     const calendarRange = useMemo(() => getCalendarRangeFromRows(rows), [rows]);
