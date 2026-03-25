@@ -1,7 +1,10 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import * as XLSX from "xlsx";
-import { Gantt, Willow, Editor } from "@svar-ui/react-gantt";
+import { Gantt, Willow } from "@svar-ui/react-gantt";
 import "@svar-ui/react-gantt/all.css";
+
+import ColumnSettingsPopup, { type ColumnConfig } from "../components/wbs/ColumnSettingsPopup";
+import CustomTaskEditor from "../components/wbs/CustomTaskEditor";
 
 import {
     findHeaderRowIndex,
@@ -53,6 +56,22 @@ export default function WbsSvarGanttPage() {
     // SVAR Gantt 컴포넌트에 직접 전달할 데이터 (내부 상태 관리를 위해 별도 분리)
     const [ganttData, setGanttData] = useState<{ tasks: any[]; links: any[] }>({ tasks: [], links: [] });
 
+    const [showColumnPopup, setShowColumnPopup] = useState(false);
+    const [columnConfig, setColumnConfig] = useState<ColumnConfig[]>(() => [
+        { id: "text", header: "공종명", visible: true },
+        { id: "wbsCode", header: "WBS Code", visible: true },
+        { id: "start", header: "착수일", visible: true },
+        { id: "end", header: "종료일", visible: true },
+        { id: "duration", header: "기간(일)", visible: true },
+        { id: "predecessorCode", header: "선행작업", visible: true },
+        { id: "relationType", header: "관계유형", visible: true },
+        { id: "lag", header: "간격(Lag)", visible: true },
+        { id: "materialAmount", header: "재료비", visible: true },
+        { id: "laborAmount", header: "노무비", visible: true },
+        { id: "expenseAmount", header: "경비", visible: true },
+        { id: "totalAmount", header: "합계금액", visible: true }
+    ]);
+
     const rebuildFromRows = useCallback((nextRows: EditableWbsRow[]) => {
         const { tasks, links } = buildScheduledGanttData(nextRows);
         setGanttData({ tasks, links });
@@ -79,6 +98,13 @@ export default function WbsSvarGanttPage() {
         },
         [rebuildFromRows]
     );
+
+    const handleUpdateRow = useCallback((id: number, updates: Partial<EditableWbsRow>) => {
+        setRows((prev) => {
+            const nextRows = prev.map((row) => (row.id === id ? { ...row, ...updates } : row));
+            return rebuildFromRows(nextRows);
+        });
+    }, [rebuildFromRows]);
 
     // 엑셀 업로드 처리
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -160,7 +186,7 @@ export default function WbsSvarGanttPage() {
     ], []);
 
     // Svar 내장 트리 그리드 커스텀 컬럼 정의
-    const columns: any[] = useMemo(() => [
+    const baseColumns: any[] = useMemo(() => [
         { id: "text", header: "공종명", width: 250 },
         { id: "wbsCode", header: "WBS Code", width: 100 },
         {
@@ -223,11 +249,20 @@ export default function WbsSvarGanttPage() {
         { id: "totalAmount", header: "합계금액", width: 100, cell: ({ row }: any) => <MoneyCell val={row.totalAmount} /> }
     ], [applyDateChange]);
 
+    const activeColumns = useMemo(() => {
+        return columnConfig
+            .filter(c => c.visible)
+            .map(c => baseColumns.find(bc => bc.id === c.id))
+            .filter(Boolean);
+    }, [columnConfig, baseColumns]);
+
     const handleAddTask = () => {
         if (!api) return;
         const selected = api.getState().selected;
-        api.exec("add-task", {
+
+        const payload: any = {
             task: {
+                id: Date.now(),
                 text: "새 공종",
                 start: new Date(),
                 end: new Date(),
@@ -235,10 +270,15 @@ export default function WbsSvarGanttPage() {
                 predecessorCode: "",
                 relationType: "",
                 lag: 0,
-            },
-            target: selected?.[0],
-            mode: "after",
-        });
+            }
+        };
+
+        if (selected && selected.length > 0 && selected[0] != null) {
+            payload.target = selected[0];
+            payload.mode = "after";
+        }
+
+        api.exec("add-task", payload);
     };
 
     const handleDeleteTask = () => {
@@ -333,9 +373,15 @@ export default function WbsSvarGanttPage() {
         api.on("delete-task", handleDelete);
 
         return () => {
-            api.off("update-task", handleUpdate);
-            api.off("add-task", handleAdd);
-            api.off("delete-task", handleDelete);
+            if (typeof api.off === "function") {
+                api.off("update-task", handleUpdate);
+                api.off("add-task", handleAdd);
+                api.off("delete-task", handleDelete);
+            } else if (typeof api.detach === "function") {
+                api.detach("update-task", handleUpdate);
+                api.detach("add-task", handleAdd);
+                api.detach("delete-task", handleDelete);
+            }
         };
     }, [api, rebuildFromRows]);
 
@@ -361,6 +407,9 @@ export default function WbsSvarGanttPage() {
                         전체 항목 수: {rows.length}
                     </span>
                     <div style={{ display: "flex", gap: "8px" }}>
+                        <button onClick={() => setShowColumnPopup(true)} style={{ padding: "8px 16px", backgroundColor: "#10b981", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}>
+                            ⚙ 컬럼 설정
+                        </button>
                         <button onClick={handleAddTask} style={{ padding: "8px 16px", backgroundColor: "#3b82f6", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}>
                             + 작업 추가
                         </button>
@@ -372,21 +421,34 @@ export default function WbsSvarGanttPage() {
             </div>
 
             <div style={{ flex: 1, minHeight: 0, padding: 16 }}>
-                <div style={{ height: "100%", borderRadius: "8px", overflow: "hidden", border: "1px solid #e5e7eb", background: "#fff" }}>
-                    <Willow>
-                        <Gantt
-                            init={setApi}
-                            tasks={ganttData.tasks}
-                            links={ganttData.links}
-                            columns={columns}
-                            scales={ganttScales}
-                            start={calendarRange.start}
-                            end={calendarRange.end}
-                        />
-                        {api && <Editor api={api} />}
-                    </Willow>
+                <div style={{ display: "flex", height: "100%", borderRadius: "8px", overflow: "hidden", border: "1px solid #e5e7eb", background: "#fff" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <Willow>
+                            <Gantt
+                                init={setApi}
+                                tasks={ganttData.tasks}
+                                links={ganttData.links}
+                                columns={activeColumns}
+                                scales={ganttScales}
+                                start={calendarRange.start}
+                                end={calendarRange.end}
+                            />
+                        </Willow>
+                    </div>
+                    {api && <CustomTaskEditor api={api} rows={rows} onUpdateRow={handleUpdateRow} />}
                 </div>
             </div>
+
+            {showColumnPopup && (
+                <ColumnSettingsPopup
+                    columns={columnConfig}
+                    onApply={(newConfig) => {
+                        setColumnConfig(newConfig);
+                        setShowColumnPopup(false);
+                    }}
+                    onClose={() => setShowColumnPopup(false)}
+                />
+            )}
         </div>
     );
 }
