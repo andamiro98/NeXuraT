@@ -1,4 +1,4 @@
-import {useMemo} from "react";
+import { useMemo } from "react";
 import { Gantt, Willow } from "@svar-ui/react-gantt";
 import "@svar-ui/react-gantt/all.css";
 
@@ -32,8 +32,10 @@ export default function WbsSvarGanttPage() {
     }, [state.columnConfig, baseColumns]);
 
     return (
-        <>
-            <GanttHeader
+        <div style={{ width: "100%", height: "100vh" }}>
+            <Willow>
+                <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
+                    <GanttHeader
                 onFileUpload={state.handleFileUpload}
                 summary={state.summary}
                 totalRowsCount={state.rows.length}
@@ -41,11 +43,11 @@ export default function WbsSvarGanttPage() {
                 onSizeSettingsClick={() => state.setShowSizeSettings(true)}
                 onCpmCalculationClick={state.handleCpmCalculation}
                 isCpmDisabled={state.rows.length === 0}
-                cpmError={state.cpmError}
-            />
+                        cpmError={state.cpmError}
+                    />
 
-            <Willow>
-                <Gantt
+                    <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+                        <Gantt
                     init={state.setApi}
                     tasks={state.ganttData.tasks}
                     links={state.ganttData.links}
@@ -55,11 +57,12 @@ export default function WbsSvarGanttPage() {
                     zoom={state.zoomConfig}
                     cellWidth={state.sizeSettings.cellWidth}
                     cellHeight={state.sizeSettings.cellHeight}
-                    scaleHeight={state.sizeSettings.scaleHeight}
-                />
-            </Willow>
+                            scaleHeight={state.sizeSettings.scaleHeight}
+                        />
+                    </div>
+                </div>
 
-            {state.api && (
+                {state.api && (
                 <CustomTaskEditor
                     api={state.api}
                     rows={state.rows}
@@ -89,6 +92,7 @@ export default function WbsSvarGanttPage() {
                     onClose={() => state.setShowSizeSettings(false)}
                 />
             )}
-        </>
+            </Willow>
+        </div>
     );
 }
