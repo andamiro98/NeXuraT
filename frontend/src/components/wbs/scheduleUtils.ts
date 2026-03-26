@@ -64,7 +64,7 @@ export function computeGanttDurationDays(
     const diffMs = endOnly.getTime() - startOnly.getTime();
     if (diffMs < 0) return null;
 
-    return Math.floor(diffMs / DAY_MS) + 1;
+    return Math.floor(diffMs / DAY_MS);
 }
 
 // 금액 콤마 포맷터

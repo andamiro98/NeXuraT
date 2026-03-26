@@ -6,7 +6,7 @@ import type { GanttSizeSettings } from "../../../../pages/GanttSizeSettingsPanel
 import { DEFAULT_SIZE_SETTINGS } from "../constants";
 import { safeGetLocalStorage, safeSetLocalStorage, toOptionalDateInputValue, hasBothDates, hasValidDate } from "../utils/helpers";
 import { createInitialZoomConfig, type GanttZoomConfig } from "../utils/zoomConfig";
-import { buildScheduledGanttData, computeDurationDays, getCalendarRangeFromRows, toDateInputValue } from "../../scheduleUtils";
+import { buildScheduledGanttData, computeDurationDays, computeGanttDurationDays, getCalendarRangeFromRows, toDateInputValue } from "../../scheduleUtils";
 import { findHeaderRowIndex, buildMergedHeaders, resolveColumnIndexes, buildNodeTree, flattenTreeToEditableRows } from "../../excelUtils";
 import { calculateCpm } from "../../pdmUtils";
 
@@ -127,7 +127,7 @@ export function useGanttState() {
                 end: hasDates ? endDate : undefined,
                 startDate,
                 endDate,
-                duration: hasDates ? computeDurationDays(startDate, endDate) : 0,
+                duration: hasDates ? computeGanttDurationDays(startDate, endDate) ?? 0 : 0,
             };
         });
 
