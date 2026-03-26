@@ -11,6 +11,7 @@ interface CustomTaskEditorProps {
 export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskEditorProps) {
     const [selectedId, setSelectedId] = useState<number | string | null>(null);
     const [userClosed, setUserClosed] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(false);
 
     useEffect(() => {
         if (!api) return;
@@ -100,7 +101,9 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
 
     return (
         <div style={{
-            width: "350px",
+            width: isExpanded ? "800px" : "350px", // 확대/축소 기능
+            minWidth: isExpanded ? "800px" : "350px", // Flex layout 유지 위한 최소 너비 고정
+            transition: "width 0.2s ease-in-out, min-width 0.2s ease-in-out",
             borderLeft: "1px solid #e5e7eb",
             backgroundColor: "#fff",
             display: "flex",
@@ -117,12 +120,21 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
                 borderBottom: "1px solid #e5e7eb"
             }}>
                 <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "600", color: "#374151" }}>작업 상세 정보</h3>
-                <button
-                    onClick={handleClose}
-                    style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "#6b7280" }}
-                >
-                    &times;
-                </button>
+                <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                    <button
+                        onClick={() => setIsExpanded(!isExpanded)}
+                        title={isExpanded ? "축소하기" : "확대하기"}
+                        style={{ background: "none", border: "1px solid #d1d5db", borderRadius: "4px", padding: "4px 8px", fontSize: "12px", cursor: "pointer", color: "#374151", outline: "none" }}
+                    >
+                        {isExpanded ? "축소 ➡" : "⬅ 확대"}
+                    </button>
+                    <button
+                        onClick={handleClose}
+                        style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "#6b7280" }}
+                    >
+                        &times;
+                    </button>
+                </div>
             </div>
 
             <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -206,6 +218,70 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
                         style={{ padding: "8px", border: "1px solid #d1d5db", borderRadius: "4px", fontSize: "14px" }}
                     />
                 </div>
+
+                {/* 1. 하위 내역이 존재할 때만 렌더링 (1~6레벨 등 내역이 없으면 테이블 영역을 생성하지 않음) */}
+                {row.detailItems && row.detailItems.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "8px" }}>
+                        <label style={{ fontSize: "12px", color: "#374151", fontWeight: "700", borderBottom: "1px solid #e5e7eb", paddingBottom: "4px" }}>
+                            상세 내역 ({row.detailItems.length}건)
+                        </label>
+                        {/* 2. 가로 스크롤 허용: 컬럼이 많아 에디터 폭을 넘어가더라도 가로 스크롤바가 생기도록 강제 */}
+                        <div style={{ overflowX: "auto" }}>
+                            <table style={{ width: "100%", fontSize: "11px", borderCollapse: "collapse", minWidth: "900px" }}>
+                                <thead>
+                                    {/* 3. 상단 2단 그룹 헤더 (합계/재료비/노무비/경비의 단가와 금액을 그룹핑) */}
+                                    <tr style={{ backgroundColor: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
+                                        <th rowSpan={2} style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "left" }}>WBS</th>
+                                        <th rowSpan={2} style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "left" }}>공종명</th>
+                                        <th rowSpan={2} style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "left" }}>규격</th>
+                                        <th rowSpan={2} style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "right" }}>수량</th>
+                                        <th rowSpan={2} style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "center" }}>단위</th>
+                                        <th colSpan={2} style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "center" }}>합계</th>
+                                        <th colSpan={2} style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "center" }}>재료비</th>
+                                        <th colSpan={2} style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "center" }}>노무비</th>
+                                        <th colSpan={2} style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "center" }}>경비</th>
+                                        <th rowSpan={2} style={{ padding: "4px", textAlign: "left" }}>비고</th>
+                                    </tr>
+                                    <tr style={{ backgroundColor: "#fefefe", borderBottom: "1px solid #e5e7eb" }}>
+                                        <th style={{ padding: "2px 4px", fontSize: "10px", textAlign: "right", borderRight: "1px solid #f3f4f6" }}>단가</th>
+                                        <th style={{ padding: "2px 4px", fontSize: "10px", textAlign: "right", borderRight: "1px solid #e5e7eb" }}>금액</th>
+                                        <th style={{ padding: "2px 4px", fontSize: "10px", textAlign: "right", borderRight: "1px solid #f3f4f6" }}>단가</th>
+                                        <th style={{ padding: "2px 4px", fontSize: "10px", textAlign: "right", borderRight: "1px solid #e5e7eb" }}>금액</th>
+                                        <th style={{ padding: "2px 4px", fontSize: "10px", textAlign: "right", borderRight: "1px solid #f3f4f6" }}>단가</th>
+                                        <th style={{ padding: "2px 4px", fontSize: "10px", textAlign: "right", borderRight: "1px solid #e5e7eb" }}>금액</th>
+                                        <th style={{ padding: "2px 4px", fontSize: "10px", textAlign: "right", borderRight: "1px solid #f3f4f6" }}>단가</th>
+                                        <th style={{ padding: "2px 4px", fontSize: "10px", textAlign: "right", borderRight: "1px solid #e5e7eb" }}>금액</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {/* 4. 내역 항목들을 반복하며 테이블 행(tr) 생성 */}
+                                    {row.detailItems.map((item, idx) => (
+                                        <tr key={idx} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                                            <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", color: "#6b7280" }}>{item.wbsCode}</td>
+                                            <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", fontWeight: "500" }}>{item.workName}</td>
+                                            <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb" }}>{item.spec}</td>
+                                            
+                                            {/* 5. 금액/수량 숫자 포맷팅 (.toLocaleString()으로 1,000단위 쉼표 추가) */}
+                                            <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "right" }}>{item.quantity?.toLocaleString() ?? 0}</td>
+                                            <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "center" }}>{item.unit}</td>
+                                            <td style={{ padding: "4px", borderRight: "1px solid #f3f4f6", textAlign: "right", color: "#6b7280" }}>{item.totalUnitPrice?.toLocaleString() ?? 0}</td>
+                                            <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "right", fontWeight: "600", color: "#111827" }}>{item.totalAmount?.toLocaleString() ?? 0}</td>
+                                            <td style={{ padding: "4px", borderRight: "1px solid #f3f4f6", textAlign: "right", color: "#6b7280" }}>{item.materialUnitPrice?.toLocaleString() ?? 0}</td>
+                                            <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "right", color: "#374151" }}>{item.materialAmount?.toLocaleString() ?? 0}</td>
+                                            <td style={{ padding: "4px", borderRight: "1px solid #f3f4f6", textAlign: "right", color: "#6b7280" }}>{item.laborUnitPrice?.toLocaleString() ?? 0}</td>
+                                            <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "right", color: "#374151" }}>{item.laborAmount?.toLocaleString() ?? 0}</td>
+                                            <td style={{ padding: "4px", borderRight: "1px solid #f3f4f6", textAlign: "right", color: "#6b7280" }}>{item.expenseUnitPrice?.toLocaleString() ?? 0}</td>
+                                            <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "right", color: "#374151" }}>{item.expenseAmount?.toLocaleString() ?? 0}</td>
+                                            
+                                            {/* 6. 비고란이 매우 길면 줄바꿈 없이 자르고 말풍선(title 속성)으로 전체 텍스트 제공 */}
+                                            <td style={{ padding: "4px", color: "#6b7280", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.remark}>{item.remark}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
 
             </div>
         </div>

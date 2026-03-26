@@ -4,6 +4,27 @@ export interface SummaryInfo {
     ignoredDetailRows: number;  // ignoredDetailRows: WBS Lv가 "내역"이어서 무시된 행 개수
 }
 
+// 내역 (Detail / Level 7 Child Items) 데이터
+// 엑셀에서 '내역'에 해당하는 한 줄의 데이터를 통째로 담을 수 있는 인터페이스입니다.
+export interface WbsDetailItem {
+    wbsCode: string;
+    workName: string;
+    spec: string;       // 규격
+    quantity: number;   // 수량
+    unit: string;       // 단위
+
+    totalUnitPrice: number;     // 합계단가
+    totalAmount: number;        // 합계금액
+    materialUnitPrice: number;  // 재료비단가
+    materialAmount: number;     // 재료비금액
+    laborUnitPrice: number;     // 노무비단가
+    laborAmount: number;        // 노무비금액
+    expenseUnitPrice: number;   // 경비단가
+    expenseAmount: number;      // 경비금액
+
+    remark: string;             // 비고
+}
+
 // 엑셀 원본을 읽어서 "트리 구조"로 바꾼 중간 단계 데이터
 export interface NodeTreeItem {
     internalId: number; // internalId: 시스템 내부에서 사용하는 고유 id
@@ -27,6 +48,10 @@ export interface NodeTreeItem {
 
     // 자식 노드 배열
     children: NodeTreeItem[];
+
+    // 내역들
+    // 어떤 WBS 항목(주로 7레벨)이 자신의 하위 내역 아이템들을 배열 형태로 보관합니다.
+    detailItems?: WbsDetailItem[];
 }
 
 // 관계유형은 선택 가능한 값이 정해져 있다.
@@ -78,6 +103,8 @@ export interface EditableWbsRow {
     tf?: number;
     ff?: number;
     isCritical?: boolean;
+
+    detailItems?: WbsDetailItem[];
 }
 
 export interface GanttTaskItem {

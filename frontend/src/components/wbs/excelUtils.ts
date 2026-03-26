@@ -100,6 +100,21 @@ export function resolveColumnIndexes(headers: string[]) {
         lag: findIndex("간격"),
         relationType: findIndex("관계유형"),
         duration: findIndex("기간"),
+
+        // 내역(Detail)용 추가 필드
+        // 엑셀의 헤더 텍스트를 기반으로 실제 데이터가 위치한 열 번호를 찾습니다.
+        spec: findIndex("규격", "품명/규격"),
+        quantity: findIndex("수량"),
+        unit: findIndex("단위"),
+        totalUnitPrice: findIndex("합계단가", "단가"),
+        totalAmountDetail: findIndex("합계금액", "금액"),
+        materialUnitPrice: findIndex("재료비단가"),
+        materialAmountDetail: findIndex("재료비금액"),
+        laborUnitPrice: findIndex("노무비단가"),
+        laborAmountDetail: findIndex("노무비금액"),
+        expenseUnitPrice: findIndex("경비단가"),
+        expenseAmountDetail: findIndex("경비금액"),
+        remark: findIndex("비고"),
     };
 
     // 필수 컬럼이 없으면 즉시 에러를 발생시킨다.
@@ -143,9 +158,31 @@ export function buildNodeTree(
         const levelText = String(rawLevel).trim();
 
         // 사용자가 요구한 로직:
-        // WBS Lv가 "내역"이면 무시
+        // WBS Lv가 "내역"이면 가장 최근 부모(스택의 마지막 노드)의 detailItems에 추가
+        // 스택(stack)은 부모-자식 계층을 추적하는 배열이며, 여기서 방금 전까지 처리된 일반 WBS 아이템을 꺼냅니다.
         if (levelText === "내역") {
-            ignoredDetailRows += 1;
+            const parentNode = stack[stack.length - 1]; // 일반적으로 내역 바로 위의 WBS 아이템
+            if (parentNode) {
+                if (!parentNode.detailItems) parentNode.detailItems = [];
+                parentNode.detailItems.push({
+                    wbsCode: cleanText(row[columnIndexes.wbsCode]),
+                    workName: cleanText(row[columnIndexes.workName]),
+                    spec: cleanText(row[columnIndexes.spec]),
+                    quantity: toNumber(row[columnIndexes.quantity]),
+                    unit: cleanText(row[columnIndexes.unit]),
+                    totalUnitPrice: toNumber(row[columnIndexes.totalUnitPrice]),
+                    totalAmount: toNumber(row[columnIndexes.totalAmountDetail]),
+                    materialUnitPrice: toNumber(row[columnIndexes.materialUnitPrice]),
+                    materialAmount: toNumber(row[columnIndexes.materialAmountDetail]),
+                    laborUnitPrice: toNumber(row[columnIndexes.laborUnitPrice]),
+                    laborAmount: toNumber(row[columnIndexes.laborAmountDetail]),
+                    expenseUnitPrice: toNumber(row[columnIndexes.expenseUnitPrice]),
+                    expenseAmount: toNumber(row[columnIndexes.expenseAmountDetail]),
+                    remark: cleanText(row[columnIndexes.remark]),
+                });
+            } else {
+                ignoredDetailRows += 1;
+            }
             return;
         }
 
@@ -237,6 +274,8 @@ export function flattenTreeToEditableRows(roots: NodeTreeItem[]): EditableWbsRow
             predecessorCode: node.predecessorCode,
             relationType: node.relationType,
             lag: node.lag,
+
+            detailItems: node.detailItems,
         });
 
         // DFS(깊이 우선 탐색) 방식으로 자식들을 순서대로 펼친다.
