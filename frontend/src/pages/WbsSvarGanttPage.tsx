@@ -34,41 +34,43 @@ export default function WbsSvarGanttPage() {
     return (
         <div style={{ width: "100%", height: "100vh" }}>
             <Willow>
-                <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
-                    <GanttHeader
-                onFileUpload={state.handleFileUpload}
-                summary={state.summary}
-                totalRowsCount={state.rows.length}
-                onColumnSettingsClick={() => state.setShowColumnPopup(true)}
-                onSizeSettingsClick={() => state.setShowSizeSettings(true)}
-                onCpmCalculationClick={state.handleCpmCalculation}
-                isCpmDisabled={state.rows.length === 0}
-                        cpmError={state.cpmError}
-                    />
-
-                    <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
-                        <Gantt
-                    init={state.setApi}
-                    tasks={state.ganttData.tasks}
-                    links={state.ganttData.links}
-                    columns={activeColumns}
-                    start={state.calendarRange.start}
-                    end={state.calendarRange.end}
-                    zoom={state.zoomConfig}
-                    cellWidth={state.sizeSettings.cellWidth}
-                    cellHeight={state.sizeSettings.cellHeight}
-                            scaleHeight={state.sizeSettings.scaleHeight}
+                <div style={{ display: "flex", flexDirection: "row", width: "100%", height: "100%" }}>
+                    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+                        <GanttHeader
+                            onFileUpload={state.handleFileUpload}
+                            summary={state.summary}
+                            totalRowsCount={state.rows.length}
+                            onColumnSettingsClick={() => state.setShowColumnPopup(true)}
+                            onSizeSettingsClick={() => state.setShowSizeSettings(true)}
+                            onCpmCalculationClick={state.handleCpmCalculation}
+                            isCpmDisabled={state.rows.length === 0}
+                            cpmError={state.cpmError}
                         />
-                    </div>
-                </div>
 
-                {state.api && (
-                <CustomTaskEditor
-                    api={state.api}
-                    rows={state.rows}
-                    onUpdateRow={state.handleUpdateRow}
-                />
-            )}
+                        <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+                            <Gantt
+                                init={state.setApi}
+                                tasks={state.ganttData.tasks}
+                                links={state.ganttData.links}
+                                columns={activeColumns}
+                                start={state.calendarRange.start}
+                                end={state.calendarRange.end}
+                                zoom={state.zoomConfig}
+                                cellWidth={state.sizeSettings.cellWidth}
+                                cellHeight={state.sizeSettings.cellHeight}
+                                scaleHeight={state.sizeSettings.scaleHeight}
+                            />
+                        </div>
+                    </div>
+
+                    {state.api && (
+                        <CustomTaskEditor
+                            api={state.api}
+                            rows={state.rows}
+                            onUpdateRow={state.handleUpdateRow}
+                        />
+                    )}
+                </div>
 
             {state.showColumnPopup && (
                 <ColumnSettingsPopup
