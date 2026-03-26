@@ -48,55 +48,27 @@ export const formatWeek = (date: Date): string => {
  * levels: 각 zoom 단계별로 어떤 단위(연/월/주/일/시간)로 표시할지 정의
  */
 export const createInitialZoomConfig = (): GanttZoomConfig => ({
-    level: 4,
-    minCellWidth: 50,
-    maxCellWidth: 300,
+    level: 2,
+    minCellWidth: 35,
+    maxCellWidth: 200,
     levels: [
         {
-            minCellWidth: 200, maxCellWidth: 400,
+            minCellWidth: 35, maxCellWidth: 200,
             scales: [{ unit: "year", step: 1, format: formatYear }],
         },
         {
-            minCellWidth: 150, maxCellWidth: 400,
-            scales: [
-                { unit: "year", step: 1, format: formatYear },
-                { unit: "quarter", step: 1, format: formatQuarter },
-            ],
-        },
-        {
-            minCellWidth: 250, maxCellWidth: 350,
-            scales: [
-                { unit: "quarter", step: 1, format: formatQuarter },
-                { unit: "month", step: 1, format: formatYearMonth },
-            ],
-        },
-        {
-            minCellWidth: 100, maxCellWidth: 220,
+            minCellWidth: 35, maxCellWidth: 200,
             scales: [
                 { unit: "month", step: 1, format: formatYearMonth },
-                { unit: "week", step: 1, format: formatWeek },
             ],
         },
         {
-            minCellWidth: 100, maxCellWidth: 200,
+            minCellWidth: 35, maxCellWidth: 200,
             scales: [
                 { unit: "month", step: 1, format: formatMonth },
                 { unit: "day", step: 1, format: formatDay, css: weekendCss },
             ],
-        },
-        {
-            minCellWidth: 25, maxCellWidth: 100,
-            scales: [
-                { unit: "day", step: 1, format: formatDay, css: weekendCss },
-                { unit: "hour", step: 6, format: formatHourMinute },
-            ],
-        },
-        {
-            minCellWidth: 25, maxCellWidth: 120,
-            scales: [
-                { unit: "day", step: 1, format: formatDay, css: weekendCss },
-                { unit: "hour", step: 1, format: formatHourMinute },
-            ],
-        },
+        }
+
     ],
 } as GanttZoomConfig);

@@ -1,13 +1,30 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import {useState, useMemo, useCallback, useEffect} from "react";
 import * as XLSX from "xlsx";
 import type { EditableWbsRow, SummaryInfo } from "../../types";
 import type { ColumnConfig } from "../../ColumnSettingsPopup";
 import type { GanttSizeSettings } from "../../../../pages/GanttSizeSettingsPanel";
 import { DEFAULT_SIZE_SETTINGS } from "../constants";
-import { safeGetLocalStorage, safeSetLocalStorage, toOptionalDateInputValue, hasBothDates, hasValidDate } from "../utils/helpers";
+import {
+    toOptionalDateInputValue,
+    hasBothDates,
+    hasValidDate, safeGetLocalStorage, safeSetLocalStorage
+} from "../utils/helpers";
 import { createInitialZoomConfig, type GanttZoomConfig } from "../utils/zoomConfig";
-import { buildScheduledGanttData, computeDurationDays, computeGanttDurationDays, getCalendarRangeFromRows, toDateInputValue } from "../../scheduleUtils";
-import { findHeaderRowIndex, buildMergedHeaders, resolveColumnIndexes, buildNodeTree, flattenTreeToEditableRows } from "../../excelUtils";
+import {
+    buildScheduledGanttData,
+    computeDurationDays,
+    computeGanttDurationDays,
+    getCalendarRange,
+    getCalendarRangeFromRows,
+    toDateInputValue
+} from "../../scheduleUtils";
+import {
+    findHeaderRowIndex,
+    buildMergedHeaders,
+    resolveColumnIndexes,
+    buildNodeTree,
+    flattenTreeToEditableRows
+} from "../../excelUtils";
 import { calculateCpm } from "../../pdmUtils";
 
 export function useGanttState() {
@@ -21,7 +38,10 @@ export function useGanttState() {
     // - 엑셀 파싱 후 상단에 보여줄 요약 수치
     // - createdNodeCount: 생성된 공종(노드) 수
     // - ignoredDetailRows: 트리 생성 과정에서 무시된 상세 행 수
-    const [summary, setSummary] = useState<SummaryInfo>({ createdNodeCount: 0, ignoredDetailRows: 0 });
+    const [summary, setSummary] = useState<SummaryInfo>({
+        createdNodeCount: 0,
+        ignoredDetailRows: 0
+    });
 
     // api:
     // - SVAR Gantt에서 init 콜백을 통해 전달되는 API 객체
@@ -33,14 +53,18 @@ export function useGanttState() {
     // - tasks: 왼쪽 그리드 + 오른쪽 차트에 공통으로 전달되는 task 배열
     // - links: 선후행 관계선을 그릴 link 배열
     // rows를 직접 넣지 않고 한 번 변환한 구조를 유지한다.
-    const [ganttData, setGanttData] = useState<{ tasks: any[]; links: any[] }>({ tasks: [], links: [] });
+    const [ganttData, setGanttData] = useState<{ tasks: any[]; links: any[] }>({
+        tasks: [],
+        links: []
+    });
 
     const [showColumnPopup, setShowColumnPopup] = useState(false);
+
     // columnConfig:
     // - 왼쪽 그리드에 표시할 컬럼 목록의 순서와 visible 상태를 관리
     // - ColumnSettingsPopup에서 이 값을 수정하면 activeColumns가 다시 계산된다.
     // - id는 baseColumns의 각 컬럼 id와 연결된다.
-    const [columnConfig, setColumnConfig] = useState<ColumnConfig[]>(() => [
+    const [columnConfig, setColumnConfig] = useState<ColumnConfig[]>([
         { id: "text", header: "공종명", visible: true },
         { id: "wbsCode", header: "WBS Code", visible: true },
         { id: "start", header: "착수일", visible: true },
@@ -59,7 +83,7 @@ export function useGanttState() {
         { id: "lf", header: "LF", visible: false },
         { id: "tf", header: "TF", visible: false },
         { id: "ff", header: "FF", visible: false },
-        { id: "isCritical", header: "주공정", visible: false },
+        { id: "isCritical", header: "주공정", visible: false }
     ]);
 
     const [showSizeSettings, setShowSizeSettings] = useState(false);
@@ -72,23 +96,37 @@ export function useGanttState() {
         return DEFAULT_SIZE_SETTINGS;
     });
 
-    // zoomLevel:
-    // - 현재 활성화된 zoom 단계 숫자만 저장한다.
-    // - 전체 zoom 설정 객체(levels, scales, css 함수)는 코드 안의 템플릿을 그대로 사용한다.
-    // - localStorage에는 숫자 level만 저장해서 함수(css)가 JSON 직렬화 과정에서 사라지는 문제를 피한다.
-    const [zoomLevel, setZoomLevel] = useState<number>(() => {
-        const saved = safeGetLocalStorage("wbs-gantt-zoom-level");
-        const parsed = saved ? Number(saved) : 4;
-        return Number.isFinite(parsed) ? parsed : 4;
-    });
-
     useEffect(() => {
         safeSetLocalStorage("wbs-gantt-size-settings", JSON.stringify(sizeSettings));
     }, [sizeSettings]);
 
-    useEffect(() => {
-        safeSetLocalStorage("wbs-gantt-zoom-level", String(zoomLevel));
-    }, [zoomLevel]);
+    // zoomLevel:
+    // - 현재 활성화된 zoom 단계 숫자만 저장
+    // - 전체 zoom 설정 객체(levels, scales, css 함수)는 코드 안의 템플릿을 그대로 사용
+    const zoomTemplate = useMemo(() => createInitialZoomConfig(), []);
+
+    // localStorage 없이 현재 화면 안에서만 zoom 상태를 유지한다.
+    const [zoomLevel, setZoomLevel] = useState<number>(zoomTemplate.level ?? 4);
+
+    // Ctrl + wheel 등으로 들어오는 줌 방향값(+ / -)만 받아서
+    // level 숫자를 안전한 범위 안에서만 증감시킨다.
+    const changeZoomBy = useCallback((dir: number) => {
+        const levelsCount = zoomTemplate.levels?.length ?? 1;
+        const minLevel = 0;
+        const maxLevel = Math.max(levelsCount - 1, 0);
+
+        if (!Number.isFinite(dir) || dir === 0) return;
+
+        setZoomLevel((prev) => {
+            const next = prev + (dir > 0 ? 1 : -1);
+            return Math.max(minLevel, Math.min(maxLevel, next));
+        });
+    }, [zoomTemplate]);
+
+    // "차트 크기/줌 설정 초기화" 버튼에서 사용할 기본 zoom 복원 함수
+    const resetZoom = useCallback(() => {
+        setZoomLevel(zoomTemplate.level ?? 4);
+    }, [zoomTemplate]);
 
     // zoomConfig:
     // - Gantt에 넘길 최종 zoom 설정 객체
@@ -96,10 +134,26 @@ export function useGanttState() {
     // - 현재 선택된 zoomLevel 숫자만 덮어써서 사용
     const zoomConfig = useMemo<GanttZoomConfig>(() => {
         return {
-            ...createInitialZoomConfig(),
-            level: zoomLevel,
+            ...zoomTemplate,
+            level: zoomLevel
         };
-    }, [zoomLevel]);
+    }, [zoomTemplate, zoomLevel]);
+
+    // 현재 화면에 보이는 차트 날짜 범위
+    // 기존처럼 rows가 바뀔 때마다 자동 재계산하지 않고, 별도 state로 관리
+    const [calendarRange, setCalendarRange] = useState<{ start: Date; end: Date }>(() => getCalendarRange());
+
+    // task가 현재 화면 범위를 벗어났을 때만 차트 범위를 넓힌다.
+    // 포인트는 "자동 축소하지 않는다"는 점이다.
+    // 그래서 task를 옮겨도 사용자가 줌이 바뀐 것처럼 느끼는 현상을 줄일 수 있다.
+    const expandCalendarRangeIfNeeded = useCallback((nextRows: EditableWbsRow[]) => {
+        const nextRange = getCalendarRangeFromRows(nextRows);
+
+        setCalendarRange((prev) => ({
+            start: nextRange.start < prev.start ? nextRange.start : prev.start,
+            end: nextRange.end > prev.end ? nextRange.end : prev.end
+        }));
+    }, []);
 
     // rows -> ganttData 변환 함수
     // nextRows를 받아 task / link를 다시 만든 뒤 setGanttData까지 수행한다.
@@ -127,7 +181,7 @@ export function useGanttState() {
                 end: hasDates ? endDate : undefined,
                 startDate,
                 endDate,
-                duration: hasDates ? computeGanttDurationDays(startDate, endDate) ?? 0 : 0,
+                duration: hasDates ? computeGanttDurationDays(startDate, endDate) ?? 0 : 0
             };
         });
 
@@ -145,8 +199,12 @@ export function useGanttState() {
 
         // 6. 최종 ganttData 반영
         setGanttData({ tasks: normalizedTasks, links: visibleLinks });
+
+        // rows가 바뀌더라도 화면 범위를 무조건 다시 계산하지 않고, 필요한 경우에만 범위를 넓힌다.
+        expandCalendarRangeIfNeeded(nextRows);
+
         return nextRows;
-    }, []);
+    }, [expandCalendarRangeIfNeeded]);
 
     // 날짜 컬럼 input 변경 처리
     // rowId: 수정 대상 행 id
@@ -157,13 +215,17 @@ export function useGanttState() {
             setRows((prev) => {
                 const nextRows = prev.map((row) => {
                     if (row.id !== rowId) return row;
+
                     const nextRow: EditableWbsRow = { ...row, [field]: rawValue };
+
                     const nextDuration = hasBothDates(nextRow.startDate, nextRow.endDate)
                         ? computeDurationDays(nextRow.startDate, nextRow.endDate)
                         : null;
+
                     nextRow.durationDays = nextDuration != null ? String(nextDuration) : null;
                     return nextRow;
                 });
+
                 return rebuildFromRows(nextRows);
             });
         },
@@ -186,6 +248,7 @@ export function useGanttState() {
         if (!file) return;
 
         const reader = new FileReader();
+
         reader.onload = (evt) => {
             const result = evt.target?.result;
             if (!(result instanceof ArrayBuffer)) return;
@@ -199,9 +262,16 @@ export function useGanttState() {
             try {
                 const headerIdx = findHeaderRowIndex(sheetData as any[]);
                 if (headerIdx !== -1) {
-                    const headers = buildMergedHeaders(sheetData[headerIdx] as any, sheetData[headerIdx + 1] as any);
+                    const headers = buildMergedHeaders(
+                        sheetData[headerIdx] as any,
+                        sheetData[headerIdx + 1] as any
+                    );
                     const cols = resolveColumnIndexes(headers);
-                    const { roots, createdNodeCount, ignoredDetailRows } = buildNodeTree(sheetData as any[], cols);
+                    const {
+                        roots,
+                        createdNodeCount,
+                        ignoredDetailRows
+                    } = buildNodeTree(sheetData as any[], cols);
 
                     const newRows: EditableWbsRow[] = flattenTreeToEditableRows(roots).map(
                         (row): EditableWbsRow => {
@@ -209,71 +279,97 @@ export function useGanttState() {
                             const endDate = toDateInputValue(row.endDate);
                             const rawDur = row.durationDays;
                             const computed = computeDurationDays(startDate, endDate);
+
                             const durationDays: string | null =
                                 rawDur != null && rawDur !== ""
                                     ? String(rawDur)
-                                    : computed != null ? String(computed) : null;
+                                    : computed != null
+                                        ? String(computed)
+                                        : null;
 
                             return {
-                                ...row, startDate, endDate, durationDays,
+                                ...row,
+                                startDate,
+                                endDate,
+                                durationDays,
                                 duration: row.duration != null ? String(row.duration) : "",
-                                lag: row.lag != null ? String(row.lag) : "",
+                                lag: row.lag != null ? String(row.lag) : ""
                             };
                         }
                     );
 
                     setRows(newRows);
                     setSummary({ createdNodeCount, ignoredDetailRows });
+
+                    // 파일을 처음 불러올 때는 전체 일정 범위에 맞춰 차트 시작/종료일을 세팅
+                    // 이후에는 rebuildFromRows가 "필요할 때만 확장"하도록 동작
+                    setCalendarRange(getCalendarRangeFromRows(newRows));
+
                     rebuildFromRows(newRows);
                 }
             } catch (err) {
                 console.error("Excel Parsing Error", err);
             }
         };
+
         reader.readAsArrayBuffer(file);
     };
-
-    // 현재 rows를 기준으로 차트 시작일 / 종료일 범위를 계산
-    const calendarRange = useMemo(() => getCalendarRangeFromRows(rows), [rows]);
 
     const [cpmError, setCpmError] = useState<string | null>(null);
 
     const handleCpmCalculation = useCallback(() => {
         if (rows.length === 0) return;
+
         setCpmError(null);
+
         try {
             const calculated = calculateCpm(rows);
             const nextRows = rebuildFromRows(calculated);
             setRows(nextRows);
 
-            setColumnConfig(prev => prev.map(c => {
-                if (["es", "ef", "ls", "lf", "tf", "ff", "isCritical"].includes(c.id)) {
-                    return { ...c, visible: true };
-                }
-                return c;
-            }));
+            setColumnConfig((prev) =>
+                prev.map((c) => {
+                    if (["es", "ef", "ls", "lf", "tf", "ff", "isCritical"].includes(c.id)) {
+                        return { ...c, visible: true };
+                    }
+                    return c;
+                })
+            );
         } catch (err: any) {
             setCpmError(err.message ?? "CPM 계산 중 오류가 발생했습니다.");
         }
     }, [rows, rebuildFromRows]);
 
     return {
-        rows, setRows,
-        summary, setSummary,
-        api, setApi,
-        ganttData, setGanttData,
-        showColumnPopup, setShowColumnPopup,
-        columnConfig, setColumnConfig,
-        showSizeSettings, setShowSizeSettings,
-        sizeSettings, setSizeSettings,
-        zoomLevel, setZoomLevel,
+        rows,
+        setRows,
+        summary,
+        setSummary,
+        api,
+        setApi,
+        ganttData,
+        setGanttData,
+        showColumnPopup,
+        setShowColumnPopup,
+        columnConfig,
+        setColumnConfig,
+        showSizeSettings,
+        setShowSizeSettings,
+        sizeSettings,
+        setSizeSettings,
+        zoomLevel,
+        setZoomLevel,
+        changeZoomBy,
+        resetZoom,
         zoomConfig,
         rebuildFromRows,
         applyDateChange,
         handleUpdateRow,
         handleFileUpload,
         calendarRange,
-        cpmError, setCpmError,
+        setCalendarRange,
+        cpmError,
+        setCpmError,
         handleCpmCalculation
     };
 }

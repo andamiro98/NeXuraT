@@ -3,17 +3,6 @@ import MoneyCell from "../components/MoneyCell";
 import { toOptionalDateInputValue } from "../utils/helpers";
 import { DATE_INPUT_STYLE } from "../constants";
 
-// scale format 콜백 인자를 Date 객체로 정리
-const resolveScaleDate = (...args: any[]): Date | null => {
-    for (const arg of args) {
-        if (arg instanceof Date && !Number.isNaN(arg.getTime())) return arg;
-    }
-    for (const arg of args) {
-        const parsed = new Date(arg);
-        if (!Number.isNaN(parsed.getTime())) return parsed;
-    }
-    return null;
-};
 
 /**
  * Gantt의 스케일(상단 헤더 날짜)과 기본 컬럼(좌측 그리드)을 생성하는 훅
@@ -23,29 +12,6 @@ const resolveScaleDate = (...args: any[]): Date | null => {
 export function useGanttColumns(
     applyDateChange: (rowId: number, field: "startDate" | "endDate", rawValue: string) => void
 ) {
-    const ganttScales = useMemo(() => [
-        {
-            unit: "month",
-            step: 1,
-            format: (...args: any[]) => {
-                const date = resolveScaleDate(...args);
-                if (!date) return "";
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, "0");
-                return `${year}년 ${month}월`;
-            },
-        },
-        {
-            unit: "day",
-            step: 1,
-            format: (...args: any[]) => {
-                const date = resolveScaleDate(...args);
-                if (!date) return "";
-                return String(date.getDate());
-            },
-        }
-    ], []);
-
     const baseColumns: any[] = useMemo(() => [
         { id: "text", header: "공종명", width: 250 },
         { id: "wbsCode", header: "WBS Code", width: 100 },
@@ -97,10 +63,10 @@ export function useGanttColumns(
                         { id: "FS", label: "FS" },
                         { id: "FF", label: "FF" },
                         { id: "SS", label: "SS" },
-                        { id: "SF", label: "SF" }
-                    ]
-                }
-            }
+                        { id: "SF", label: "SF" },
+                    ],
+                },
+            },
         },
         { id: "lag", header: "간격(Lag)", width: 80, editor: "text" },
         { id: "materialAmount", header: "재료비", width: 100, cell: ({ row }: any) => <MoneyCell val={row.materialAmount} /> },
@@ -114,15 +80,18 @@ export function useGanttColumns(
         { id: "tf", header: "TF", width: 60, align: "center", cell: ({ row }: any) => row.tf != null ? row.tf : "-" },
         { id: "ff", header: "FF", width: 60, align: "center", cell: ({ row }: any) => row.ff != null ? row.ff : "-" },
         {
-            id: "isCritical", header: "주공정", width: 80, align: "center",
-            cell: ({ row }: any) => (
-                row.isCritical == null ? "-" :
+            id: "isCritical",
+            header: "주공정",
+            width: 80,
+            align: "center",
+            cell: ({ row }: any) =>
+                row.isCritical == null ? "-" : (
                     <span style={{ fontWeight: "bold", color: row.isCritical ? "#ef4444" : "#6b7280" }}>
-                        {row.isCritical ? "Y" : "N"}
-                    </span>
-            )
+            {row.isCritical ? "Y" : "N"}
+          </span>
+                ),
         },
     ], [applyDateChange]);
 
-    return { baseColumns, ganttScales };
+    return { baseColumns };
 }

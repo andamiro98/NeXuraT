@@ -1,13 +1,18 @@
 import { useEffect } from "react";
 import type { EditableWbsRow } from "../../types";
-import { toOptionalDateInputValue, hasBothDates, normalizeRelationType, collectDescendantIds } from "../utils/helpers";
+import {
+    toOptionalDateInputValue,
+    hasBothDates,
+    normalizeRelationType,
+    collectDescendantIds
+} from "../utils/helpers";
 import { computeDurationDays } from "../../scheduleUtils";
 
 export function useGanttEvents(
     api: any,
     setRows: React.Dispatch<React.SetStateAction<EditableWbsRow[]>>,
     rebuildFromRows: (nextRows: EditableWbsRow[]) => EditableWbsRow[],
-    setZoomLevel: (level: number) => void
+    changeZoomBy: (dir: number) => void
 ) {
     useEffect(() => {
         if (!api) return;
@@ -22,15 +27,19 @@ export function useGanttEvents(
 
                     const nextRow: EditableWbsRow = { ...row };
 
-                    const nextStartDate = task.start !== undefined
-                        ? toOptionalDateInputValue(task.start)
-                        : row.startDate;
-                    const nextEndDate = task.end !== undefined
-                        ? toOptionalDateInputValue(task.end)
-                        : row.endDate;
+                    const nextStartDate =
+                        task.start !== undefined
+                            ? toOptionalDateInputValue(task.start)
+                            : row.startDate;
+
+                    const nextEndDate =
+                        task.end !== undefined
+                            ? toOptionalDateInputValue(task.end)
+                            : row.endDate;
 
                     nextRow.startDate = nextStartDate;
                     nextRow.endDate = nextEndDate;
+
                     const nextDuration = hasBothDates(nextRow.startDate, nextRow.endDate)
                         ? computeDurationDays(nextRow.startDate, nextRow.endDate)
                         : null;
@@ -82,7 +91,7 @@ export function useGanttEvents(
                     duration: String(task.duration ?? ""),
                     predecessorCode: String(task.predecessorCode ?? ""),
                     relationType: normalizeRelationType(task.relationType),
-                    lag: String(task.lag) || "",
+                    lag: String(task.lag) || ""
                 };
 
                 return rebuildFromRows([...prev, newRow]);
@@ -103,10 +112,11 @@ export function useGanttEvents(
             });
         };
 
+        // zoom-scale 이벤트에서는 절대 rows / calendarRange를 건드리지 않고 zoom 방향값만 반영
         const handleZoom = (ev: any) => {
-            const nextLevel = Number(ev?.level);
-            if (!Number.isFinite(nextLevel)) return;
-            setZoomLevel(nextLevel);
+            const dir = Number(ev?.dir);
+            if (!Number.isFinite(dir)) return;
+            changeZoomBy(dir);
         };
 
         api.on("update-task", handleUpdate);
@@ -127,5 +137,5 @@ export function useGanttEvents(
                 api.detach("zoom-scale", handleZoom);
             }
         };
-    }, [api, setRows, rebuildFromRows, setZoomLevel]);
+    }, [api, setRows, rebuildFromRows, changeZoomBy]);
 }

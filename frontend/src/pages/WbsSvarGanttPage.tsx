@@ -1,11 +1,10 @@
-import { useMemo } from "react";
+import {useMemo} from "react";
 import { Gantt, Willow } from "@svar-ui/react-gantt";
 import "@svar-ui/react-gantt/all.css";
 
 import ColumnSettingsPopup from "../components/wbs/ColumnSettingsPopup";
 import CustomTaskEditor from "../components/wbs/CustomTaskEditor";
 import GanttSizeSettingsPanel from "./GanttSizeSettingsPanel";
-
 import GanttHeader from "../components/wbs/gantt/components/GanttHeader";
 import { useGanttState } from "../components/wbs/gantt/hooks/useGanttState";
 import { useGanttEvents } from "../components/wbs/gantt/hooks/useGanttEvents";
@@ -15,19 +14,25 @@ import { DEFAULT_SIZE_SETTINGS } from "../components/wbs/gantt/constants";
 export default function WbsSvarGanttPage() {
     const state = useGanttState();
 
-    useGanttEvents(state.api, state.setRows, state.rebuildFromRows, state.setZoomLevel);
+    useGanttEvents(
+        state.api,
+        state.setRows,
+        state.rebuildFromRows,
+        state.changeZoomBy
+    );
 
-    const { baseColumns, ganttScales } = useGanttColumns(state.applyDateChange);
+    // ganttScales를 따로 넘기면 zoom 설정과 역할이 겹칠 수 있으므로 zoomConfig를 기준으로만 스케일을 제어
+    const { baseColumns } = useGanttColumns(state.applyDateChange);
 
     const activeColumns = useMemo(() => {
         return state.columnConfig
-            .filter(c => c.visible)
-            .map(c => baseColumns.find(bc => bc.id === c.id))
+            .filter((c) => c.visible)
+            .map((c) => baseColumns.find((bc) => bc.id === c.id))
             .filter(Boolean);
     }, [state.columnConfig, baseColumns]);
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100vh", backgroundColor: "#f9fafb" }}>
+        <>
             <GanttHeader
                 onFileUpload={state.handleFileUpload}
                 summary={state.summary}
@@ -39,29 +44,28 @@ export default function WbsSvarGanttPage() {
                 cpmError={state.cpmError}
             />
 
-            <div style={{ flex: 1, minHeight: 0, padding: 16 }}>
-                <div style={{ display: "flex", height: "100%", borderRadius: "8px", overflow: "hidden", border: "1px solid #e5e7eb", background: "#fff" }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                        <Willow>
-                            <Gantt
-                                init={state.setApi}
-                                tasks={state.ganttData.tasks}
-                                links={state.ganttData.links}
-                                columns={activeColumns}
-                                scales={ganttScales}
-                                start={state.calendarRange.start}
-                                end={state.calendarRange.end}
-                                zoom={state.zoomConfig}
-                                cellWidth={state.sizeSettings.cellWidth}
-                                cellHeight={state.sizeSettings.cellHeight}
-                                scaleHeight={state.sizeSettings.scaleHeight}
-                            />
-                        </Willow>
-                    </div>
+            <Willow>
+                <Gantt
+                    init={state.setApi}
+                    tasks={state.ganttData.tasks}
+                    links={state.ganttData.links}
+                    columns={activeColumns}
+                    start={state.calendarRange.start}
+                    end={state.calendarRange.end}
+                    zoom={state.zoomConfig}
+                    cellWidth={state.sizeSettings.cellWidth}
+                    cellHeight={state.sizeSettings.cellHeight}
+                    scaleHeight={state.sizeSettings.scaleHeight}
+                />
+            </Willow>
 
-                    {state.api && <CustomTaskEditor api={state.api} rows={state.rows} onUpdateRow={state.handleUpdateRow} />}
-                </div>
-            </div>
+            {state.api && (
+                <CustomTaskEditor
+                    api={state.api}
+                    rows={state.rows}
+                    onUpdateRow={state.handleUpdateRow}
+                />
+            )}
 
             {state.showColumnPopup && (
                 <ColumnSettingsPopup
@@ -80,11 +84,11 @@ export default function WbsSvarGanttPage() {
                     onApply={state.setSizeSettings}
                     onReset={() => {
                         state.setSizeSettings(DEFAULT_SIZE_SETTINGS);
-                        state.setZoomLevel(4);
+                        state.resetZoom();
                     }}
                     onClose={() => state.setShowSizeSettings(false)}
                 />
             )}
-        </div>
+        </>
     );
 }
