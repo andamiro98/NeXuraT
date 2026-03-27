@@ -70,26 +70,3 @@ export function safeSetLocalStorage(key: string, value: string): void {
         // 무시
     }
 }
-
-/**
- * 하위 노드 ID 식별 함수
- * 삭제 시 대상이 되는 모든 자식 트리의 ID를 수집합니다.
- */
-export function collectDescendantIds(targetId: number, sourceRows: EditableWbsRow[]): Set<number> {
-    const ids = new Set<number>([targetId]);
-    let changed = true;
-
-    while (changed) {
-        changed = false;
-        for (const row of sourceRows) {
-            const parentId = Number(row.parentId ?? 0);
-            const rowId = Number(row.id);
-
-            if (ids.has(parentId) && !ids.has(rowId)) {
-                ids.add(rowId);
-                changed = true;
-            }
-        }
-    }
-    return ids;
-}
