@@ -65,6 +65,7 @@ export const createInitialZoomConfig = (): GanttZoomConfig => ({
         {
             minCellWidth: 35, maxCellWidth: 200,
             scales: [
+                { unit: "year", step: 1, format: formatYear },
                 { unit: "month", step: 1, format: formatMonth },
                 { unit: "day", step: 1, format: formatDay, css: weekendCss },
             ],
