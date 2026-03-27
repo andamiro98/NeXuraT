@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import MoneyCell from "../components/MoneyCell";
 import { toOptionalDateInputValue } from "../utils/helpers";
 import { DATE_INPUT_STYLE } from "../constants";
+import CopyCell from "../../CopyCell";
 
 
 /**
@@ -14,7 +15,11 @@ export function useGanttColumns(
 ) {
     const baseColumns: any[] = useMemo(() => [
         { id: "text", header: "공종명", width: 250 },
-        { id: "wbsCode", header: "WBS Code", width: 100 },
+        {
+            id: "wbsCode", header: "WBS Code", width: 200, cell: ({ row }: any) => (
+                <CopyCell value={row.wbsCode} />
+            ),
+        },
         {
             id: "start",
             header: "착수일",
@@ -50,25 +55,26 @@ export function useGanttColumns(
             align: "center",
             cell: ({ row }: any) => row.durationDays ?? row.duration ?? "-",
         },
-        { id: "predecessorCode", header: "선행작업", width: 90, editor: "text" },
         {
-            id: "relationType",
-            header: "관계유형",
-            width: 90,
-            editor: {
-                type: "combo",
-                config: {
-                    options: [
-                        { id: "", label: "-" },
-                        { id: "FS", label: "FS" },
-                        { id: "FF", label: "FF" },
-                        { id: "SS", label: "SS" },
-                        { id: "SF", label: "SF" },
-                    ],
-                },
-            },
+            id: "predecessorCode",
+            header: "선행작업",
+            width: 200,
+            cell: ({ row }: any) => (
+                //tooltip 표시
+                <div
+                    title={row.predecessorCode}
+                    style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap"
+                    }}
+                >
+                    {row.predecessorCode || "-"}
+                </div>
+            )
         },
-        { id: "lag", header: "간격(Lag)", width: 80, editor: "text" },
+        { id: "relationType", header: "관계유형", width: 90 },
+        { id: "lag", header: "간격(Lag)", width: 80 },
         { id: "materialAmount", header: "재료비", width: 100, cell: ({ row }: any) => <MoneyCell val={row.materialAmount} /> },
         { id: "laborAmount", header: "노무비", width: 100, cell: ({ row }: any) => <MoneyCell val={row.laborAmount} /> },
         { id: "expenseAmount", header: "경비", width: 100, cell: ({ row }: any) => <MoneyCell val={row.expenseAmount} /> },
@@ -84,13 +90,23 @@ export function useGanttColumns(
             header: "주공정",
             width: 80,
             align: "center",
-            cell: ({ row }: any) =>
-                row.isCritical == null ? "-" : (
-                    <span style={{ fontWeight: "bold", color: row.isCritical ? "#ef4444" : "#6b7280" }}>
-            {row.isCritical ? "Y" : "N"}
-          </span>
-                ),
-        },
+            cell: ({ row }: any) => {
+                const isLeaf = !row.children || row.children.length === 0;
+
+                if (!isLeaf) return "-";
+
+                return row.isCritical == null ? "-" : (
+                    <span
+                        style={{
+                            fontWeight: "bold",
+                            color: row.isCritical ? "#ef4444" : "#6b7280"
+                        }}
+                    >
+                        {row.isCritical ? "Y" : "N"}
+                    </span>
+                );
+            },
+        }
     ], [applyDateChange]);
 
     return { baseColumns };
