@@ -3,15 +3,15 @@ import type { EditableWbsRow } from "./types";
 import { computeDurationDays } from "./scheduleUtils";
 
 interface CustomTaskEditorProps {
-    api: any;
-    rows: EditableWbsRow[];
-    onUpdateRow: (id: number, updates: Partial<EditableWbsRow>) => void;
+    api: any; // 부모 컴포넌트(WbsSvarGanttPage)에서 SVAR 간트 라이브러리 초기화 후 반환받아 넘겨준 내부 API/이벤트 제어용 인스턴스
+    rows: EditableWbsRow[]; // 부모 단의 useGanttState 훅에서 전체 상태로 보유 중인 1차원 형태 공종(WBS) 목록 전체 데이터
+    onUpdateRow: (id: number, updates: Partial<EditableWbsRow>) => void; // 우측 에디터에서 수정한 내용을 부모 메인 상태 배열에 덮어쓰도록 연결된 handleUpdateRow 콜백 기능
 }
 
 export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskEditorProps) {
-    const [selectedId, setSelectedId] = useState<number | string | null>(null);
-    const [userClosed, setUserClosed] = useState(false);
-    const [isExpanded, setIsExpanded] = useState(false);
+    const [selectedId, setSelectedId] = useState<number | string | null>(null); // 좌측 트리나 간트 차트에서 현재 선택(포커싱)되어 우측 상세 패널에 내용을 띄워놓은 작업의 ID 번호
+    const [userClosed, setUserClosed] = useState(false); // 사용자가 직접 패널의 닫기('X') 버튼을 눌러서 의도적으로 상세 편집창을 숨겼는지 나타내는 상태 플래그
+    const [isExpanded, setIsExpanded] = useState(false); // 하단 상세 테이블 등이 넓게 보일 수 있게 패널 자체의 가로폭(width)을 토글 형태로 넓혔는지 여부 상태
 
     useEffect(() => {
         if (!api) return;

@@ -58,7 +58,7 @@ export function useGanttState() {
         links: []
     });
 
-    const [showColumnPopup, setShowColumnPopup] = useState(false);
+    const [showColumnPopup, setShowColumnPopup] = useState(false); // 좌측 그리드에 어떤 열(컬럼)들을 띄울지 선택하는 설정 팝업창 활성화 상태
 
     // columnConfig:
     // - 왼쪽 그리드에 표시할 컬럼 목록의 순서와 visible 상태를 관리
@@ -86,7 +86,7 @@ export function useGanttState() {
         { id: "isCritical", header: "주공정", visible: false }
     ]);
 
-    const [showSizeSettings, setShowSizeSettings] = useState(false);
+    const [showSizeSettings, setShowSizeSettings] = useState(false); // 간트 차트의 표시 크기(셀 너비/높이 등) 제어 패널의 열림 상태
 
     const [sizeSettings, setSizeSettings] = useState<GanttSizeSettings>(() => {
         const saved = safeGetLocalStorage("wbs-gantt-size-settings");
@@ -330,7 +330,7 @@ export function useGanttState() {
     // filteredGanttData:
     // - levelFilter가 비어 있으면 ganttData 그대로 반환
     // - 선택된 레벨이 있으면 해당 레벨의 task만 포함
-    // ⚠️ SVAR Gantt null.forEach 방지 핵심 조건:
+    //   SVAR Gantt null.forEach 방지 핵심 조건:
     //   1. parent 제거 → 부모 없는 참조 차단
     //   2. type을 "task"로 강제 → "summary" 타입은 SVAR가 자식 배열 탐색을 시도하는데
     //      필터 후 자식이 없으면 null.forEach 발생
@@ -365,7 +365,7 @@ export function useGanttState() {
         return { tasks: filteredTasks, links: filteredLinks };
     }, [ganttData, levelFilter, rows]);
 
-    const [cpmError, setCpmError] = useState<string | null>(null);
+    const [cpmError, setCpmError] = useState<string | null>(null); // CPM(주공정망) 계산 로직 실행 중 발생하는 오류 메시지를 잠시 저장해두는 상태
 
     const handleCpmCalculation = useCallback(() => {
         if (rows.length === 0) return;

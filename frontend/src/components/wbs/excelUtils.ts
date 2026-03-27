@@ -190,24 +190,24 @@ export function buildNodeTree(
         if (!Number.isFinite(level)) return;
 
         const node: NodeTreeItem = {
-            internalId: sequence++,
-            level,
-            parentInternalId: null,
-            wbsLevel: level,
-            wbsCode: cleanText(row[columnIndexes.wbsCode]),
-            workName: cleanText(row[columnIndexes.workName]),
-            totalAmount: toNumber(row[columnIndexes.totalAmount]),
-            materialAmount: toNumber(row[columnIndexes.materialAmount]),
-            laborAmount: toNumber(row[columnIndexes.laborAmount]),
-            expenseAmount: toNumber(row[columnIndexes.expenseAmount]),
-            children: [],
+            internalId: sequence++, // 시스템에서 노드를 구분하는 고유 식별 번호 (1번부터 순차 증가)
+            level, // 현재 노드의 WBS 트리 계층 깊이 (예: 1레벨, 2레벨)
+            parentInternalId: null, // 부모 노드의 고유 ID (최상위 노드는 부모가 없으므로 첫 세팅 시 null)
+            wbsLevel: level, // 엑셀 원본 파일에서 읽은 WBS Lv 숫자값
+            wbsCode: cleanText(row[columnIndexes.wbsCode]), // 엑셀의 WBS 코드 
+            workName: cleanText(row[columnIndexes.workName]), // 공종명 (작업의 이름)
+            totalAmount: toNumber(row[columnIndexes.totalAmount]), // 총 합계 금액
+            materialAmount: toNumber(row[columnIndexes.materialAmount]), // 재료비 금액
+            laborAmount: toNumber(row[columnIndexes.laborAmount]), // 노무비 금액
+            expenseAmount: toNumber(row[columnIndexes.expenseAmount]), // 경비 금액
+            children: [], // 현재 노드의 하위 레벨(자식) 노드들을 저장할 배열
 
             // 추가(PDM 로직 테스트)
-            predecessorCode: cleanText(row[columnIndexes.predecessorCode]),
-            lag: cleanText(row[columnIndexes.lag]),
-            relationType: cleanText(row[columnIndexes.relationType]),
-            duration: cleanText(row[columnIndexes.duration]),
-            durationDays: cleanText(row[columnIndexes.duration]) || null,
+            predecessorCode: cleanText(row[columnIndexes.predecessorCode]), // 먼저 수행해야 하는 선행작업의 식별 코드
+            lag: cleanText(row[columnIndexes.lag]), // 선행작업 종료 후 후행작업 착수까지의 지연 기간 (Lag)
+            relationType: cleanText(row[columnIndexes.relationType]), // 선행작업과의 관계 유형 (예: FS, SS, FF, SF)
+            duration: cleanText(row[columnIndexes.duration]), // 엑셀에서 읽어온 순수 텍스트 형태의 기간 값
+            durationDays: cleanText(row[columnIndexes.duration]) || null, // 스케줄링 계산을 위해 일(Day) 단위로 활용할 기간 값
         };
 
         // level 1이면 루트 노드
@@ -251,31 +251,31 @@ export function flattenTreeToEditableRows(roots: NodeTreeItem[]): EditableWbsRow
         const hasChildren = node.children.length > 0;
 
         result.push({
-            id: node.internalId,
-            parentId,
-            level: node.level,
-            hasChildren,
-            open: hasChildren,
+            id: node.internalId, // 시스템 내부적으로 행(row)을 식별하기 위한 고유 번호
+            parentId, // 현재 행의 부모가 되는 행의 ID 번호 (최상위 항목일 경우 0)
+            level: node.level, // 트리 구조에서 현재 행이 위치한 깊이(들여쓰기) 수준
+            hasChildren, // 해당 부모의 아래에 자식 항목(하위 공종)들이 존재하는지 여부
+            open: hasChildren, // 화면 좌측 트리그리드에 렌더링할 때 초기에 열어둘 것인지 설정
 
-            workName: node.workName || "(공종명 없음)",
-            wbsCode: node.wbsCode,
+            workName: node.workName || "(공종명 없음)", // 공종명 명칭 (엑셀에서 비어있을 경우 기본 텍스트)
+            wbsCode: node.wbsCode, // 화면에 표시될 대상의 WBS 코드
 
-            totalAmount: node.totalAmount,
-            materialAmount: node.materialAmount,
-            laborAmount: node.laborAmount,
-            expenseAmount: node.expenseAmount,
+            totalAmount: node.totalAmount, // 공종 전체 금액
+            materialAmount: node.materialAmount, // 공종의 재료비
+            laborAmount: node.laborAmount, // 공종의 노무비
+            expenseAmount: node.expenseAmount, // 공종의 경비
 
-            startDate: `${new Date().getFullYear()}-01-01`,
-            endDate: `${new Date().getFullYear()}-01-01`,
+            startDate: `${new Date().getFullYear()}-01-01`, // 기본 착수일 설정 (엑셀 파싱 시 현재 년도의 1월 1일로 세팅)
+            endDate: `${new Date().getFullYear()}-01-01`, // 기본 종료일 설정 (엑셀 파싱 시 현재 년도의 1월 1일로 세팅)
             // durationDays: null,
 
-            durationDays: node.duration || null,
-            duration: node.duration,
-            predecessorCode: node.predecessorCode,
-            relationType: node.relationType,
-            lag: node.lag,
+            durationDays: node.duration || null, // 작업 처리 소요 기간 (숫자 변환 및 일정 연산 목적 활용)
+            duration: node.duration, // 엑셀에서 원본으로 가져온 순수 작업 기간 텍스트
+            predecessorCode: node.predecessorCode, // 먼저 마무리되어야 하는 선행 작업 코드
+            relationType: node.relationType, // 작업의 관계 조건 형태 (FS, SS 등)
+            lag: node.lag, // 작업들 간의 지연 간격(Lag, 일 단위)
 
-            detailItems: node.detailItems,
+            detailItems: node.detailItems, // 특정 항목의 수량, 단가가 엑셀 '내역' 형태로 묶여있는 하위 목록
         });
 
         // DFS(깊이 우선 탐색) 방식으로 자식들을 순서대로 펼친다.
