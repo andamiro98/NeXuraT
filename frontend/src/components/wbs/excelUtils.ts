@@ -265,8 +265,8 @@ export function flattenTreeToEditableRows(roots: NodeTreeItem[]): EditableWbsRow
             laborAmount: node.laborAmount,
             expenseAmount: node.expenseAmount,
 
-            startDate: "",
-            endDate: "",
+            startDate: `${new Date().getFullYear()}-01-01`,
+            endDate: `${new Date().getFullYear()}-01-01`,
             // durationDays: null,
 
             durationDays: node.duration || null,
