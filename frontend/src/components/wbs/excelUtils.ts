@@ -122,7 +122,7 @@ export function resolveColumnIndexes(headers: string[]) {
         startDate: findIndex("착수일", "계획착수일", "일정착수일", "작업일정착수일"),
         endDate: findIndex("종료일", "계획종료일", "일정종료일", "작업일정종료일"),
         predecessorCode: findIndex("선행작업", "선행작업액티비티", "작업관계선행작업", "액티비티"),
-        lag: findIndex("간격", "선행작업간격", "작업관계간격"),
+        lag: findIndex("간격", "선행작업간격", "작업관계간격", "선행작업간격(Lag)", "간격(Lag)"),
         relationType: findIndex("관계유형", "선행작업관계유형", "작업관계관계유형"),
         duration: findIndex("기간", "계획기간(일)", "기간(일)"),
 
