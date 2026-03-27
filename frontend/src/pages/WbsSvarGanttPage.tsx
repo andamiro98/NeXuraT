@@ -13,6 +13,7 @@ import { DEFAULT_SIZE_SETTINGS } from "../components/wbs/gantt/constants";
 
 export default function WbsSvarGanttPage() {
     const state = useGanttState();
+    const { setLevelFilter } = state;
 
     useGanttEvents(
         state.api,
@@ -21,8 +22,6 @@ export default function WbsSvarGanttPage() {
         state.changeZoomBy
     );
 
-    // ganttScales를 따로 넘기면 zoom 설정과 역할이 겹칠 수 있으므로
-    // zoomConfig를 기준으로만 스케일을 제어
     const { baseColumns } = useGanttColumns(state.applyDateChange);
 
     const activeColumns = useMemo(() => {
@@ -32,9 +31,8 @@ export default function WbsSvarGanttPage() {
             .filter(Boolean);
     }, [state.columnConfig, baseColumns]);
 
-    // 레벨 필터 토글: 이미 선택된 레벨이면 해제, 없으면 추가
     const handleLevelFilterChange = useCallback((level: number) => {
-        state.setLevelFilter((prev) => {
+        setLevelFilter((prev) => {
             const next = new Set(prev);
             if (next.has(level)) {
                 next.delete(level);
@@ -43,12 +41,11 @@ export default function WbsSvarGanttPage() {
             }
             return next;
         });
-    }, [state.setLevelFilter]);
+    }, [setLevelFilter]);
 
-    // 전체 보기로 리셋
     const handleLevelFilterReset = useCallback(() => {
-        state.setLevelFilter(new Set());
-    }, [state.setLevelFilter]);
+        setLevelFilter(new Set());
+    }, [setLevelFilter]);
 
     return (
         <div style={{ width: "100%", height: "100vh" }}>
