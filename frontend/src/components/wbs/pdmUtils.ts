@@ -6,22 +6,32 @@ import type { EditableWbsRow } from "./types";
  */
 const INF = Math.floor(Number.MAX_SAFE_INTEGER / 4);
 
-/**
- * 값이 문자열/숫자/null/undefined 중 무엇이 와도 안전하게 숫자로 바꿔준다.
- *
- * 예)
- * - null, undefined, ""  -> 0
- * - "5"                  -> 5
- * - 7                    -> 7
- * - "abc"                -> 0
- *
- * durationDays 같은 필드를 계산에 넣기 전에 항상 이 함수를 거친다.
- */
-const toNum = (v: string | number | null | undefined): number => {
-    if (v == null || v === "") return 0;
-    const n = typeof v === "number" ? v : parseFloat(String(v));
-    return Number.isNaN(n) ? 0 : n;
-};
+function normalizeWbsCode(value: string): string {
+    return value.trim().toUpperCase();
+}
+
+function parseFiniteNumber(value: string | number | null | undefined, fieldName: string, rowLabel: string): number {
+    if (value == null || String(value).trim() === "") {
+        throw new Error(`CPM 입력 오류: ${rowLabel}의 ${fieldName} 값이 비어 있습니다.`);
+    }
+
+    const n = typeof value === "number" ? value : Number(String(value).trim());
+    if (!Number.isFinite(n)) {
+        throw new Error(`CPM 입력 오류: ${rowLabel}의 ${fieldName} 값이 숫자가 아닙니다. (${value})`);
+    }
+
+    return n;
+}
+
+function parseDurationDays(value: string | number | null | undefined, rowLabel: string): number {
+    const duration = parseFiniteNumber(value, "durationDays", rowLabel);
+
+    if (duration < 0) {
+        throw new Error(`CPM 입력 오류: ${rowLabel}의 durationDays 는 음수일 수 없습니다. (${duration})`);
+    }
+
+    return duration;
+}
 
 /**
  * 선행관계 1건을 표현하는 타입
@@ -163,14 +173,17 @@ function parseRelationValues(value: unknown): Dependency["rel"][] {
  * 아주 엄격하게 유지해야 한다면, 이 함수도 relationType처럼
  * 빈 값은 0으로 남기도록 바꾸는 게 더 안전하다. -->  나중에 할거!!!!!!!!!!
  */
-function parseLagValues(value: unknown): number[] {
+function parseLagValues(value: unknown, rowLabel: string): number[] {
     return String(value ?? "")
         .split(",")
         .map(v => v.trim())
-        .filter(v => v !== "")
         .map(v => {
+            if (v === "") return 0;
             const n = parseInt(v, 10);
-            return Number.isNaN(n) ? 0 : n;
+            if (Number.isNaN(n)) {
+                throw new Error(`CPM 입력 오류: ${rowLabel}의 lag 값이 숫자가 아닙니다. (${v})`);
+            }
+            return n;
         });
 }
 
@@ -195,7 +208,7 @@ function parseLagValues(value: unknown): number[] {
  *       -> 역시 시작일 환산을 위해 duration을 뺀다
  */
 function forwardConstraint(pred: ActivityNode, succ: ActivityNode, rel: Dependency["rel"], lag: number): number {
-    const dur = toNum(succ.row.durationDays);
+    const dur = parseDurationDays(succ.row.durationDays, `작업 ${succ.key}`);
 
     switch (rel) {
         case "FS": return pred.ef + lag;
@@ -374,10 +387,14 @@ export function calculateCpm(rows: EditableWbsRow[]): EditableWbsRow[] {
     const nodeMap = new Map<string, ActivityNode>();
 
     for (const row of eligible) {
-        const key = row.wbsCode.trim().toUpperCase();
+        const key = normalizeWbsCode(row.wbsCode);
+        const rowLabel = `작업 ${key}`;
 
-        // 혹시 중복이 들어오더라도 첫 값만 사용
-        if (nodeMap.has(key)) continue;
+        parseDurationDays(row.durationDays, rowLabel);
+
+        if (nodeMap.has(key)) {
+            throw new Error(`CPM 입력 오류: 중복된 WBS Code(${key})가 있습니다.`);
+        }
 
         nodeMap.set(key, {
             row,
@@ -412,6 +429,7 @@ export function calculateCpm(rows: EditableWbsRow[]): EditableWbsRow[] {
      */
     for (const node of nodeMap.values()) {
         const predCodeRaw = node.row.predecessorCode;
+        const rowLabel = `작업 ${node.key}`;
 
         // 선행작업이 없는 시작 작업이면 건너뜀
         if (!predCodeRaw || !predCodeRaw.trim()) continue;
@@ -435,7 +453,19 @@ export function calculateCpm(rows: EditableWbsRow[]): EditableWbsRow[] {
          * - B200 -> SS, 3
          */
         const relTypes = parseRelationValues(node.row.relationType);
-        const lagValues = parseLagValues(node.row.lag);
+        const lagValues = parseLagValues(node.row.lag, rowLabel);
+
+        if (String(node.row.relationType ?? "").trim() !== "" && relTypes.length !== predCodes.length) {
+            throw new Error(
+                `CPM 입력 오류: ${rowLabel}의 predecessorCode(${predCodes.length})와 relationType(${relTypes.length}) 개수가 맞지 않습니다.`
+            );
+        }
+
+        if (String(node.row.lag ?? "").trim() !== "" && lagValues.length !== predCodes.length) {
+            throw new Error(
+                `CPM 입력 오류: ${rowLabel}의 predecessorCode(${predCodes.length})와 lag(${lagValues.length}) 개수가 맞지 않습니다.`
+            );
+        }
 
         for (let i = 0; i < predCodes.length; i++) {
             const token = predCodes[i];
@@ -449,9 +479,9 @@ export function calculateCpm(rows: EditableWbsRow[]): EditableWbsRow[] {
                  * 예) "A100FS+2"
                  */
                 dep = parseDependency(token);
-            } catch {
-                // 이상한 값이면 조용히 무시
-                continue;
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                throw new Error(`CPM 입력 오류: ${rowLabel}의 선행작업 값 "${token}" 을 해석할 수 없습니다. ${message}`);
             }
 
             /**
@@ -480,6 +510,10 @@ export function calculateCpm(rows: EditableWbsRow[]): EditableWbsRow[] {
                 dep = { code: dep.code, rel, lag };
             }
 
+            if (normalizeWbsCode(dep.code) === node.key) {
+                throw new Error(`CPM 입력 오류: ${rowLabel}가 자기 자신을 선행작업으로 참조하고 있습니다.`);
+            }
+
             /**
              * 선행작업 code가 실제 계산 대상(nodeMap)에 존재하는지 확인
              * 없으면 연결하지 않는다.
@@ -489,8 +523,13 @@ export function calculateCpm(rows: EditableWbsRow[]): EditableWbsRow[] {
              * - duration이 없어 CPM 대상에서 제외됨
              * - 입력 데이터 누락
              */
-            const predNode = nodeMap.get(dep.code.toUpperCase());
-            if (!predNode) continue;
+            const predNode = nodeMap.get(normalizeWbsCode(dep.code));
+            if (!predNode) {
+                throw new Error(
+                    `CPM 입력 오류: ${rowLabel}의 선행작업 ${dep.code} 를 찾을 수 없습니다. ` +
+                    "선행작업이 leaf가 아니거나 durationDays 가 비어 있을 수 있습니다."
+                );
+            }
 
             /**
              * 현재 노드 입장에서 선행작업 추가
@@ -545,7 +584,7 @@ export function calculateCpm(rows: EditableWbsRow[]): EditableWbsRow[] {
         let esVal = 0;
 
         for (const dep of node.predecessors) {
-            const pred = nodeMap.get(dep.code.toUpperCase());
+            const pred = nodeMap.get(normalizeWbsCode(dep.code));
             if (!pred) continue;
 
             // 선행관계 1건이 요구하는 최소 시작 가능 시점
@@ -556,7 +595,7 @@ export function calculateCpm(rows: EditableWbsRow[]): EditableWbsRow[] {
         }
 
         node.es = esVal;
-        node.ef = node.es + toNum(node.row.durationDays);
+        node.ef = node.es + parseDurationDays(node.row.durationDays, `작업 ${node.key}`);
     }
 
     /**
@@ -581,7 +620,7 @@ export function calculateCpm(rows: EditableWbsRow[]): EditableWbsRow[] {
     const reversed = [...sorted].reverse();
 
     for (const node of reversed) {
-        const duration = toNum(node.row.durationDays);
+        const duration = parseDurationDays(node.row.durationDays, `작업 ${node.key}`);
 
         /**
          * 후행이 없는 끝 작업
@@ -695,7 +734,7 @@ export function calculateCpm(rows: EditableWbsRow[]): EditableWbsRow[] {
      * nodeMap에 존재하는 row만 계산값을 덮어쓴다.
      */
     return rows.map(row => {
-        const key = row.wbsCode?.trim().toUpperCase();
+        const key = row.wbsCode ? normalizeWbsCode(row.wbsCode) : undefined;
         const node = key ? nodeMap.get(key) : undefined;
 
         // CPM 계산 대상이 아니면 원본 그대로 반환
