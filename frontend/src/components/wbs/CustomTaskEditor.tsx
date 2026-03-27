@@ -66,7 +66,7 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
     const row = rows.find((r) => String(r.id) === String(selectedId));
 
     // 간트 데이터(rows) 갱신 시 SVAR Gantt 내부적으로 선택이 풀려버리는 현상을 보완하기 위해
-    // 현재 에디터가 띄워져 있는 작동 중인 공종(Task)을 강제로 다시 선택(Highlight) 상태로 만들어줍니다.
+    // 현재 에디터가 띄워져 있는 작동 중인 공종(Task)을 강제로 다시 선택(Highlight)
     useEffect(() => {
         if (!api || !selectedId || userClosed || !row) return;
 
@@ -133,7 +133,7 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
     })();
 
     // 수정된 객체 배열 폼을 다시 콤마(,) 문자열 형태로 직렬화하여 부모 상태에 업데이트하는 반영 헬퍼 함수
-    const applyPredecessors = (newPredecessors: { code: string, rel: string, lag: string }[]) => {
+    const applyPredecessors = (newPredecessors: {code: string, rel: string, lag: string}[]) => {
         // 모든 선행작업이 삭제되어 빈 배열이 되었다면, 기존 상태도 전부 빈 문자열로 지워서 부모 측 전파
         if (newPredecessors.length === 0) {
             onUpdateRow(row.id, { predecessorCode: "", relationType: "", lag: "" });
@@ -143,7 +143,7 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
         const predCode = newPredecessors.map(p => p.code).join(", ");
         const relationType = newPredecessors.map(p => p.rel).join(", ");
         const lag = newPredecessors.map(p => p.lag).join(", ");
-
+        
         // 최종 생성된 1차원 문자열들을 상위 데이터 업데이트 콜백 함수인 handleUpdateRow(부모단)에 인계
         onUpdateRow(row.id, { predecessorCode: predCode, relationType, lag });
     };
@@ -285,7 +285,7 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
                         <label style={{ fontSize: "13px", color: "#374151", fontWeight: "700" }}>선행 작업 (Predecessors)</label>
                         <button onClick={handleAddPredecessor} style={{ fontSize: "11px", padding: "4px 8px", cursor: "pointer", border: "1px solid #d1d5db", borderRadius: "4px", backgroundColor: "#fff", fontWeight: "600", color: "#374151" }}>+ 추가</button>
                     </div>
-
+                    
                     {parsedPredecessors.map((p, i) => (
                         <div key={i} style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                             <input
@@ -364,7 +364,7 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
                                             <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", color: "#6b7280" }}>{item.wbsCode}</td>
                                             <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", fontWeight: "500" }}>{item.workName}</td>
                                             <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb" }}>{item.spec}</td>
-
+                                            
                                             {/* 5. 금액/수량 숫자 포맷팅 (.toLocaleString()으로 1,000단위 쉼표 추가) */}
                                             <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "right" }}>{item.quantity?.toLocaleString() ?? 0}</td>
                                             <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "center" }}>{item.unit}</td>
@@ -376,7 +376,7 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
                                             <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "right", color: "#374151" }}>{item.laborAmount?.toLocaleString() ?? 0}</td>
                                             <td style={{ padding: "4px", borderRight: "1px solid #f3f4f6", textAlign: "right", color: "#6b7280" }}>{item.expenseUnitPrice?.toLocaleString() ?? 0}</td>
                                             <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "right", color: "#374151" }}>{item.expenseAmount?.toLocaleString() ?? 0}</td>
-
+                                            
                                             {/* 6. 비고란이 매우 길면 줄바꿈 없이 자르고 말풍선(title 속성)으로 전체 텍스트 제공 */}
                                             <td style={{ padding: "4px", color: "#6b7280", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.remark}>{item.remark}</td>
                                         </tr>

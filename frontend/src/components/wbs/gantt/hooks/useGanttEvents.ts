@@ -7,14 +7,45 @@ import {
 } from "../utils/helpers";
 import { computeDurationDays } from "../../scheduleUtils";
 
+import type { ColumnConfig } from "../../ColumnSettingsPopup";
+
 export function useGanttEvents(
     api: any,
     setRows: React.Dispatch<React.SetStateAction<EditableWbsRow[]>>,
     rebuildFromRows: (nextRows: EditableWbsRow[]) => EditableWbsRow[],
-    changeZoomBy: (dir: number) => void
+    changeZoomBy: (dir: number) => void,
+    setColumnConfig: React.Dispatch<React.SetStateAction<ColumnConfig[]>>
 ) {
     useEffect(() => {
         if (!api) return;
+
+        let tableApi: any;
+        let isMounted = true; // 비동기 작업 중 컴포넌트가 마운트 해제됐을 시 발생할 수 있는 업데이트 오류(Memory Leak) 방지용 플래그
+
+        // 간트 내부의 트리그리드 컬럼 사이즈 조절 완료 이벤트 핸들러
+        const handleResizeColumn = (ev: any) => {
+            if (ev.inProgress) return; // 사용자가 좌우로 마우스를 계속 드래그 중인 미완료 상태일 때는 잦은 렌더링 방지를 위해 무시합니다.
+            
+            setColumnConfig((prev) => {
+                const colIdx = prev.findIndex((c) => c.id === ev.id); // 변경된 대상 컬럼이 상태 배열의 몇 번째에 있는지 찾습니다.
+                // 컬럼이 목록에 존재하고, 변경된 사이즈가 기존 상태에 반영된 사이즈와 실제 차이가 있는 유효한 상황일 경우 동작
+                if (colIdx >= 0 && ev.width !== undefined && prev[colIdx].width !== ev.width) {
+                    const next = [...prev]; // 불변성(Immutability)을 유지하며 리액트 방식대로 배열 복제
+                    next[colIdx] = { ...next[colIdx], width: ev.width }; // 새로 적용될 넓이(width) 속성을 덮어씌움
+                    return next; // 변경된 배열 상태로 반환하여 재런더링을 트리거합니다.
+                }
+                return prev; // 변동이 없다면 이전 상태 주소값을 그대로 반환하여 불필요 연산 차단
+            });
+        };
+
+        // SVAR Gantt API 내부의 독립적인 Grid(Table) 컴포넌트에 접근하여 조작 (Promise 형태로 반환될 수도 있으므로 보장성 then 체이닝 사용)
+        Promise.resolve(api.getTable?.()).then((ta: any) => {
+            if (!isMounted) return; // 비동기 대기 중 이미 다른 페이지로 빠져나가 마운트 해제되었다면 무시 처리
+            if (ta) {
+                tableApi = ta; // Grid API 인스턴스 객체를 언마운트 Cleanup용으로 글로벌 변수에 저장
+                tableApi.on("resize-column", handleResizeColumn); // 넓이가 변경되는 네이티브 이벤트를 감지하도록 핸들러를 연결합니다.
+            }
+        });
 
         const handleUpdate = (ev: any) => {
             const { id, task, inProgress } = ev; // 이벤트 객체에서 대상 ID, 업데이트된 task 요소, 마우스 드래그 중인지(inProgress) 판단 여부 추출
@@ -77,6 +108,8 @@ export function useGanttEvents(
         api.intercept("drag-task", blockRowReorder);
 
         return () => {
+            isMounted = false; // 컴포넌트 언마운트 시 안전을 위해 Flag 비활성화
+            
             if (typeof api.off === "function") {
                 api.off("update-task", handleUpdate);
                 api.off("zoom-scale", handleZoom);
@@ -91,6 +124,12 @@ export function useGanttEvents(
             } else if (typeof api.off === "function") {
                 api.off("drag-task", blockRowReorder);
             }
+
+            // Grid 컴포넌트에 직접 부착했던 넓이 조절(resize) 감지 리스너 해제 (이벤트 리스너 중첩 및 메모리 누수 방지 목적)
+            if (tableApi) {
+                if (typeof tableApi.detach === "function") tableApi.detach("resize-column", handleResizeColumn);
+                else if (typeof tableApi.off === "function") tableApi.off("resize-column", handleResizeColumn);
+            }
         };
-    }, [api, setRows, rebuildFromRows, changeZoomBy]);
+    }, [api, setRows, rebuildFromRows, changeZoomBy, setColumnConfig]);
 }

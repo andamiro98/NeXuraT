@@ -87,8 +87,8 @@ export function useGanttColumns(
             cell: ({ row }: any) =>
                 row.isCritical == null ? "-" : (
                     <span style={{ fontWeight: "bold", color: row.isCritical ? "#ef4444" : "#6b7280" }}>
-            {row.isCritical ? "Y" : "N"}
-          </span>
+                        {row.isCritical ? "Y" : "N"}
+                    </span>
                 ),
         },
     ], [applyDateChange]);

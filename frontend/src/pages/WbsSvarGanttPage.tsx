@@ -19,15 +19,21 @@ export default function WbsSvarGanttPage() {
         state.api,
         state.setRows,
         state.rebuildFromRows,
-        state.changeZoomBy
+        state.changeZoomBy,
+        state.setColumnConfig // 간트 트리그리드 사용자가 컬럼 넓이를 조절할 때 이를 앱 상태에 저장하기 위한 Setter 함수를 이벤트 훅으로 넘겨줍니다.
     );
 
     const { baseColumns } = useGanttColumns(state.applyDateChange);
 
     const activeColumns = useMemo(() => {
         return state.columnConfig
-            .filter((c) => c.visible)
-            .map((c) => baseColumns.find((bc) => bc.id === c.id))
+            .filter((c) => c.visible) // 표시 여부가 체크된 유효한 컬럼만 조회
+            .map((c) => {
+                const bc = baseColumns.find((bc) => bc.id === c.id); // 훅에서 제공하는 원본 컬럼 구성 객체 검색
+                if (!bc) return null;
+                // state.columnConfig 내부에 사용자가 간트 리사이져로 저장해 둔 고유 width가 존재한다면 우선적으로 적용하여, 기본(초기) 넓이로 돌아가는 덮어씌움 현상을 수비합니다.
+                return { ...bc, width: c.width ?? bc.width };
+            })
             .filter(Boolean);
     }, [state.columnConfig, baseColumns]);
 
