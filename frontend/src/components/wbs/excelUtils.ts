@@ -38,7 +38,7 @@ export function formatMoney(value: unknown): string {
 // 엑셀 날짜를 YYYY-MM-DD 형태로 안전하게 파싱하는 헬퍼 함수
 export function parseExcelDateOrString(value: unknown): string | null {
     if (value === null || value === undefined || value === "") return null;
-    
+
     // 만약 Excel 내부 시리얼 넘버 형태로 날짜가 들어왔다면 문자열로 역산 (예: 45000 -> 2023-03-??)
     if (typeof value === "number") {
         const excelEpoch = new Date(Date.UTC(1899, 11, 30));
@@ -118,13 +118,13 @@ export function resolveColumnIndexes(headers: string[]) {
         materialAmount: findIndex("재료비금액"),
         laborAmount: findIndex("노무비금액"),
         expenseAmount: findIndex("경비금액"),
-        // 추가(PDM 로직 테스트) - 사용자 업로드 엑셀의 3/4번째 줄 헤더 명칭 병합 결과 반영
-        startDate: findIndex("착수일", "계획착수일", "일정착수일", "작업일정착수일"),
-        endDate: findIndex("종료일", "계획종료일", "일정종료일", "작업일정종료일"),
-        predecessorCode: findIndex("선행작업", "선행작업액티비티", "작업관계선행작업", "액티비티"),
-        lag: findIndex("간격", "선행작업간격", "작업관계간격", "선행작업간격(Lag)", "간격(Lag)"),
-        relationType: findIndex("관계유형", "선행작업관계유형", "작업관계관계유형"),
-        duration: findIndex("기간", "계획기간(일)", "기간(일)"),
+        // 입력 데이터
+        startDate: findIndex("착수일"),
+        endDate: findIndex("종료일"),
+        predecessorCode: findIndex("액티비티"),
+        lag: findIndex("간격(Lag)"),
+        relationType: findIndex("관계유형"),
+        // duration: findIndex("기간", "계획기간(일)", "기간(일)"),
 
         // 내역(Detail)용 추가 필드
         // 엑셀의 헤더 텍스트를 기반으로 실제 데이터가 위치한 열 번호를 찾습니다.
