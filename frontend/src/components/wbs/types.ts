@@ -42,11 +42,9 @@ export interface NodeTreeItem {
     // 관련 일정 정보 (엑셀에서 바로 읽은 값, string 위주)
     startDate?: string | null; // 엑셀 지정 착수일
     endDate?: string | null; // 엑셀 지정 종료일
-    durationDays: string | null; // 엑셀의 기간 컨텐츠 원본 문자열
     predecessorCode: string;
     relationType: string;
     lag: string;
-    duration: string; // 기간 컨텀츠 카피 (혼용 방지를 위한 별도 필드)
 
     // 자식 노드 배열
     children: NodeTreeItem[];

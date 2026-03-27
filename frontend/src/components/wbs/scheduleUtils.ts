@@ -190,7 +190,7 @@ export function buildScheduledGanttData(rows: EditableWbsRow[]): {
     const links: GanttLinkItem[] = rows.flatMap((row) => {
         // 단 하나의 선행작업 정보라도 등록돼있지 않으면 연결선이 필요 없으므로 빈 배열 바로 리턴
         if (!row.predecessorCode) return [];
-        
+
         // 작성된 쉼표(,)를 기준으로 문자열을 잘라낸 후 개별 요소의 좌우 공백을 제거하고 빈 문자열 필터링
         const predCodes = row.predecessorCode.split(",").map(s => s.trim()).filter(Boolean);
         // 관계 유형 역시 쉼표로 자릅니다. 해당 위치 요소가 비정상 포맷이면 기본 관계유형인 "FS" 할당
@@ -199,7 +199,7 @@ export function buildScheduledGanttData(rows: EditableWbsRow[]): {
             if (u === "FS" || u === "SS" || u === "FF" || u === "SF") return u as RelationType;
             return "FS" as RelationType;
         });
-        // 지연 기간(Lag) 정보 또한 나눕니다. 값이 문자이거나 비어있으면 모두 정수 0으로 강제 형변환 처리
+        // 지연 기간(Lag) 값이 문자이거나 비어있으면 모두 정수 0으로 강제 형변환 처리
         const lagValues = String(row.lag ?? "").split(",").map(v => v.trim()).map(v => {
             const n = parseInt(v, 10);
             return Number.isNaN(n) ? 0 : n;

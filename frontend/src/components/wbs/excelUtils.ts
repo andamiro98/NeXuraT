@@ -118,13 +118,12 @@ export function resolveColumnIndexes(headers: string[]) {
         materialAmount: findIndex("재료비금액"),
         laborAmount: findIndex("노무비금액"),
         expenseAmount: findIndex("경비금액"),
-        // 입력 데이터
-        startDate: findIndex("착수일"),
-        endDate: findIndex("종료일"),
-        predecessorCode: findIndex("액티비티"),
-        lag: findIndex("간격(Lag)"),
-        relationType: findIndex("관계유형"),
-        // duration: findIndex("기간", "계획기간(일)", "기간(일)"),
+
+        startDate: findIndex("계획착수일"),
+        endDate: findIndex("계획종료일"),
+        predecessorCode: findIndex("선행작업액티비티"),
+        lag: findIndex("선행작업간격(Lag)"),
+        relationType: findIndex("선행작업관계유형"),
 
         // 내역(Detail)용 추가 필드
         // 엑셀의 헤더 텍스트를 기반으로 실제 데이터가 위치한 열 번호를 찾습니다.
@@ -143,8 +142,7 @@ export function resolveColumnIndexes(headers: string[]) {
     };
 
     // 필수 컬럼이 없으면 즉시 에러를 발생시킨다.
-    // 에러를 빨리 내야 이후 로직에서 더 큰 문제를 막을 수 있다.
-    // 단, 선행작업/관계유형/간격/기간 같은 선택 컬럼은 없어도 괜찮다.
+    // 단, 선행작업/관계유형/간격/기간 같은 선택 컬럼은 없어도 됌.
     const requiredColumnKeys = ["wbsLevel", "wbsCode", "workName"];
     const missingColumns = Object.entries(columnIndexes)
         .filter(([key, index]) => index === -1 && requiredColumnKeys.includes(key))
@@ -159,8 +157,8 @@ export function resolveColumnIndexes(headers: string[]) {
     return columnIndexes;
 }
 
-// 엑셀 행들을 실제 트리 구조(NodeTreeItem[])로 변환한다.
-// 이 함수가 WBS Lv 기반 트리 생성의 핵심이다.
+// 엑셀 행들을 실제 트리 구조(NodeTreeItem[])로 변환
+// 이 함수가 WBS Lv 기반 트리 생성의 핵심
 export function buildNodeTree(
     rows: ExcelRow[],
     columnIndexes: ReturnType<typeof resolveColumnIndexes>
@@ -184,7 +182,7 @@ export function buildNodeTree(
 
         // 사용자가 요구한 로직:
         // WBS Lv가 "내역"이면 가장 최근 부모(스택의 마지막 노드)의 detailItems에 추가
-        // 스택(stack)은 부모-자식 계층을 추적하는 배열이며, 여기서 방금 전까지 처리된 일반 WBS 아이템을 꺼냅니다.
+        // 스택(stack)은 부모-자식 계층을 추적하는 배열이며, 여기서 방금 전까지 처리된 일반 WBS 아이템
         if (levelText === "내역") {
             const parentNode = stack[stack.length - 1]; // 일반적으로 내역 바로 위의 WBS 아이템
             if (parentNode) {
@@ -233,8 +231,6 @@ export function buildNodeTree(
             predecessorCode: cleanText(row[columnIndexes.predecessorCode]), // 먼저 수행해야 하는 선행작업의 식별 코드
             lag: cleanText(row[columnIndexes.lag]), // 선행작업 종료 후 후행작업 착수까지의 지연 기간 (Lag)
             relationType: cleanText(row[columnIndexes.relationType]), // 선행작업과의 관계 유형 (예: FS, SS, FF, SF)
-            duration: cleanText(row[columnIndexes.duration]), // 엑셀에서 읽어온 순수 텍스트 형태의 기간 값
-            durationDays: cleanText(row[columnIndexes.duration]) || null, // 스케줄링 계산을 위해 일(Day) 단위로 활용할 기간 값
         };
 
         // level 1이면 루트 노드
@@ -269,8 +265,8 @@ export function buildNodeTree(
     };
 }
 
-// 트리 구조를 "화면용 1차원 행 배열"로 펼친다.
-// UI 테이블은 보통 트리 구조가 아니라 1줄씩 렌더하므로 flatten 작업이 필요하다.
+// 트리 구조를 "화면용 1차원 행 배열"로 
+// UI 테이블은 보통 트리 구조가 아니라 1줄씩 렌더하므로 flatten 작업이 필요
 export function flattenTreeToEditableRows(roots: NodeTreeItem[]): EditableWbsRow[] {
     const result: EditableWbsRow[] = [];
 
@@ -294,10 +290,9 @@ export function flattenTreeToEditableRows(roots: NodeTreeItem[]): EditableWbsRow
 
             startDate: node.startDate || `${new Date().getFullYear()}-01-01`, // 엑셀에서 추출한 날짜가 있으면 우선 적용, 없으면 기본값 세팅
             endDate: node.endDate || `${new Date().getFullYear()}-01-01`, // 엑셀에서 추출한 날짜가 있으면 우선 적용, 없으면 기본값 세팅
-            // durationDays: null,
 
-            durationDays: node.duration || null, // 작업 처리 소요 기간 (숫자 변환 및 일정 연산 목적 활용)
-            duration: node.duration, // 엑셀에서 원본으로 가져온 순수 작업 기간 텍스트
+            durationDays: null, // 간트 표기 연산을 통해 도출될 것이므로 엑셀에서 가져오지 않음
+            duration: "", // 엑셀에서 문자열 기간 데이터 임포트를 중단함에 따라 빈값 처리
             predecessorCode: node.predecessorCode, // 먼저 마무리되어야 하는 선행 작업 코드
             relationType: node.relationType, // 작업의 관계 조건 형태 (FS, SS 등)
             lag: node.lag, // 작업들 간의 지연 간격(Lag, 일 단위)
