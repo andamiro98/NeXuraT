@@ -26,11 +26,10 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
                     setSelectedId(state.selected[0]);
                     setUserClosed(false);
                 }
-            } else if (state && (!state.selected || state.selected.length === 0)) {
-                if (selectedId !== null) {
-                    setSelectedId(null);
-                }
             }
+            // 간트 데이터가 서버/상태 쪽에서 갱신(rebuild)될 때 내부적으로 선택(selected)이
+            // 일시 해제(empty)되어버리는 증상이 있으므로, 이때 에디터가 닫히지 않도록
+            // null 세팅 로직을 제거
         };
 
         const handleTaskClick = (ev: any) => {
@@ -66,9 +65,107 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
 
     const row = rows.find((r) => String(r.id) === String(selectedId));
 
+    // 간트 데이터(rows) 갱신 시 SVAR Gantt 내부적으로 선택이 풀려버리는 현상을 보완하기 위해
+    // 현재 에디터가 띄워져 있는 작동 중인 공종(Task)을 강제로 다시 선택(Highlight) 상태로 만들어줍니다.
+    useEffect(() => {
+        if (!api || !selectedId || userClosed || !row) return;
+
+        const state = api.getState();
+        if (state && (!state.selected || !state.selected.includes(selectedId))) {
+            const timer = setTimeout(() => {
+                try {
+                    api.exec("select-task", { id: selectedId });
+                } catch (e) {
+                    // 무시
+                }
+            }, 10);
+            return () => clearTimeout(timer);
+        }
+    }, [api, selectedId, userClosed, row, rows]);
+
     if (!row || userClosed) {
         return null; // Don't render if nothing is selected or user closed it
     }
+
+    // 선행작업 다중 입력을 UI에 표시할 수 있는 객체 배열 구조로 파싱하는 헬퍼 함수
+    const parsedPredecessors = (() => {
+        // 데이터가 아예 없는 경우 빈 배열을 리턴하여 UI에 선행작업 입력 폼을 띄우지 않음
+        if (row.predecessorCode == null && row.relationType == null && row.lag == null) return [];
+
+        // null과 undefined를 텍스트 편집 오류 없이 다루도록 빈 문자열("")로 캐스팅
+        const rawCode = String(row.predecessorCode || "");
+        const rawRel = String(row.relationType || "");
+        const rawLag = String(row.lag || "");
+
+        // 입력창 진입 시 선행 조건 3가지 필드가 모두 완전히 비어있다면, 등록된 선행작업이 없는 상태로 취급
+        if (!rawCode && !rawRel && !rawLag) return [];
+
+        // 콤마(,)를 기준으로 여러 개의 값을 자른 뒤 좌우 공백 제거 처리
+        // filter(Boolean)을 사용하지 않는 이유: 작성 중인 빈칸(빈 문자열) 폼이 화면 렌더링 시 사라지는 현상을 방지
+        const predCodes = rawCode.split(",").map(s => s.trim());
+        // 관계 유형 비어있으면 기본값 "FS", 지연 일수 비어있으면 기본 숫자 "0" 문자열로 대응 처리
+        const relTypes = rawRel.split(",").map(s => s.trim() || "FS");
+        const lags = rawLag.split(",").map(s => s.trim() || "0");
+
+        // 코드, 관계유형, 지연 중 가장 긴 길이를 찾아 전체 화면에 그려야 할 필드 조합(Row) 개수 결정
+        const len = Math.max(predCodes.length, relTypes.length, lags.length);
+        const result = [];
+
+        for (let i = 0; i < len; i++) {
+            let code = predCodes[i] || "";
+            let rel = relTypes[i] || "FS";
+            let lag = lags[i] || "0";
+
+            // "A100FS+2"처럼 엑셀 셀 한 칸에 공백 없이 뭉쳐서 작성한 임베디드 특수 형태 대응 로직
+            const hasEmbeddedRel = /^.+(FS|SS|FF|SF)([+-]\d+)?$/i.test(code);
+            if (hasEmbeddedRel) {
+                const match = code.match(/^(.+?)(FS|SS|FF|SF)([+-]\d+)?$/i);
+                if (match) {
+                    code = match[1].trim(); // 1그룹: WBS 코드 분리 추출
+                    rel = match[2].toUpperCase(); // 2그룹: 관계유형 추출 후 무조건 대문자화(FS 등)
+                    lag = match[3] ? match[3] : "0"; // 3그룹: 지연시간(Lag) 추출, 없으면 0 세팅
+                }
+            }
+            // 최종적으로 정리된 단일 선행작업 정보 한 묶음을 결과 배열에 적재
+            result.push({ code, rel, lag });
+        }
+        return result;
+    })();
+
+    // 수정된 객체 배열 폼을 다시 콤마(,) 문자열 형태로 직렬화하여 부모 상태에 업데이트하는 반영 헬퍼 함수
+    const applyPredecessors = (newPredecessors: { code: string, rel: string, lag: string }[]) => {
+        // 모든 선행작업이 삭제되어 빈 배열이 되었다면, 기존 상태도 전부 빈 문자열로 지워서 부모 측 전파
+        if (newPredecessors.length === 0) {
+            onUpdateRow(row.id, { predecessorCode: "", relationType: "", lag: "" });
+            return;
+        }
+        // 각 객체의 내부 속성을 분리하여 'A100, A200'과 같이 쉼표로 연결된 문자열 형태로 병합 가공
+        const predCode = newPredecessors.map(p => p.code).join(", ");
+        const relationType = newPredecessors.map(p => p.rel).join(", ");
+        const lag = newPredecessors.map(p => p.lag).join(", ");
+
+        // 최종 생성된 1차원 문자열들을 상위 데이터 업데이트 콜백 함수인 handleUpdateRow(부모단)에 인계
+        onUpdateRow(row.id, { predecessorCode: predCode, relationType, lag });
+    };
+
+    // 하단 '+ 추가' 버튼 클릭 핸들러: 현재 작업 배열 끝단에 초깃값을 가진 새로운 빈 폼 항목 객체 추가
+    const handleAddPredecessor = () => {
+        applyPredecessors([...parsedPredecessors, { code: "", rel: "FS", lag: "0" }]);
+    };
+
+    // 우측 '삭제(X)' 버튼 클릭 핸들러: 해당 index 위치에 매칭되는 선행 조건 단건을 삭제 및 재반영
+    const handleRemovePredecessor = (index: number) => {
+        const next = [...parsedPredecessors]; // 외부 상태의 불변성 훼손을 방지하기 위한 깊은 복사
+        next.splice(index, 1);
+        applyPredecessors(next);
+    };
+
+    // 특정 항목 내 각각의 인풋, 셀렉트 박스 값이 바뀔 때마다 변경사항을 덮어씌워 적용
+    const handlePredecessorChange = (index: number, field: "code" | "rel" | "lag", value: string) => {
+        const next = [...parsedPredecessors];
+        next[index] = { ...next[index], [field]: value }; // 구조 분해 할당을 통해 변경된 필드 속성만 수정
+        applyPredecessors(next);
+    };
 
     const handleChange = (field: keyof EditableWbsRow, value: any) => {
         const updates: Partial<EditableWbsRow> = { [field]: value };
@@ -183,40 +280,47 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
                     </div>
                 </div>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                    <label style={{ fontSize: "12px", color: "#6b7280", fontWeight: "600" }}>선행 작업 (Predecessor)</label>
-                    <input
-                        type="text"
-                        value={row.predecessorCode || ""}
-                        onChange={(e) => handleChange("predecessorCode", e.target.value)}
-                        style={{ padding: "8px", border: "1px solid #d1d5db", borderRadius: "4px", fontSize: "14px" }}
-                        placeholder="e.g. A01"
-                    />
-                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "8px", padding: "12px", backgroundColor: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: "8px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <label style={{ fontSize: "13px", color: "#374151", fontWeight: "700" }}>선행 작업 (Predecessors)</label>
+                        <button onClick={handleAddPredecessor} style={{ fontSize: "11px", padding: "4px 8px", cursor: "pointer", border: "1px solid #d1d5db", borderRadius: "4px", backgroundColor: "#fff", fontWeight: "600", color: "#374151" }}>+ 추가</button>
+                    </div>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                    <label style={{ fontSize: "12px", color: "#6b7280", fontWeight: "600" }}>관계 유형 (Relation Type)</label>
-                    <select
-                        value={row.relationType || ""}
-                        onChange={(e) => handleChange("relationType", e.target.value)}
-                        style={{ padding: "8px", border: "1px solid #d1d5db", borderRadius: "4px", fontSize: "14px", backgroundColor: "#fff" }}
-                    >
-                        <option value="">-</option>
-                        <option value="FS">FS (Finish to Start)</option>
-                        <option value="FF">FF (Finish to Finish)</option>
-                        <option value="SS">SS (Start to Start)</option>
-                        <option value="SF">SF (Start to Finish)</option>
-                    </select>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                    <label style={{ fontSize: "12px", color: "#6b7280", fontWeight: "600" }}>간격 (Lag)</label>
-                    <input
-                        type="text"
-                        value={row.lag || 0}
-                        onChange={(e) => handleChange("lag", Number(e.target.value))}
-                        style={{ padding: "8px", border: "1px solid #d1d5db", borderRadius: "4px", fontSize: "14px" }}
-                    />
+                    {parsedPredecessors.map((p, i) => (
+                        <div key={i} style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                            <input
+                                type="text"
+                                value={p.code}
+                                onChange={(e) => handlePredecessorChange(i, "code", e.target.value)}
+                                style={{ flex: 1, padding: "6px", border: "1px solid #d1d5db", borderRadius: "4px", fontSize: "13px" }}
+                                placeholder="작업코드 (예: A01)"
+                            />
+                            <select
+                                value={p.rel}
+                                onChange={(e) => handlePredecessorChange(i, "rel", e.target.value)}
+                                style={{ width: "65px", padding: "6px", border: "1px solid #d1d5db", borderRadius: "4px", fontSize: "13px", backgroundColor: "#fff" }}
+                            >
+                                <option value="FS">FS</option>
+                                <option value="FF">FF</option>
+                                <option value="SS">SS</option>
+                                <option value="SF">SF</option>
+                            </select>
+                            <div style={{ display: "flex", alignItems: "center", border: "1px solid #d1d5db", borderRadius: "4px", backgroundColor: "#fff", overflow: "hidden" }}>
+                                <span style={{ padding: "6px", fontSize: "12px", color: "#6b7280", backgroundColor: "#f3f4f6", borderRight: "1px solid #d1d5db" }}>Lag</span>
+                                <input
+                                    type="text"
+                                    value={p.lag}
+                                    onChange={(e) => handlePredecessorChange(i, "lag", e.target.value)}
+                                    style={{ width: "40px", padding: "6px", border: "none", fontSize: "13px", textAlign: "center", outline: "none" }}
+                                    placeholder="0"
+                                />
+                            </div>
+                            <button onClick={() => handleRemovePredecessor(i)} title="삭제" style={{ padding: "4px", background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: "16px", display: "flex", alignItems: "center", justifyContent: "center" }}>&times;</button>
+                        </div>
+                    ))}
+                    {parsedPredecessors.length === 0 && (
+                        <div style={{ fontSize: "12px", color: "#9ca3af", textAlign: "center", padding: "8px 0" }}>등록된 선행 작업이 없습니다.</div>
+                    )}
                 </div>
 
                 {/* 1. 하위 내역이 존재할 때만 렌더링 (1~6레벨 등 내역이 없으면 테이블 영역을 생성하지 않음) */}
@@ -260,7 +364,7 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
                                             <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", color: "#6b7280" }}>{item.wbsCode}</td>
                                             <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", fontWeight: "500" }}>{item.workName}</td>
                                             <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb" }}>{item.spec}</td>
-                                            
+
                                             {/* 5. 금액/수량 숫자 포맷팅 (.toLocaleString()으로 1,000단위 쉼표 추가) */}
                                             <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "right" }}>{item.quantity?.toLocaleString() ?? 0}</td>
                                             <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "center" }}>{item.unit}</td>
@@ -272,7 +376,7 @@ export default function CustomTaskEditor({ api, rows, onUpdateRow }: CustomTaskE
                                             <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "right", color: "#374151" }}>{item.laborAmount?.toLocaleString() ?? 0}</td>
                                             <td style={{ padding: "4px", borderRight: "1px solid #f3f4f6", textAlign: "right", color: "#6b7280" }}>{item.expenseUnitPrice?.toLocaleString() ?? 0}</td>
                                             <td style={{ padding: "4px", borderRight: "1px solid #e5e7eb", textAlign: "right", color: "#374151" }}>{item.expenseAmount?.toLocaleString() ?? 0}</td>
-                                            
+
                                             {/* 6. 비고란이 매우 길면 줄바꿈 없이 자르고 말풍선(title 속성)으로 전체 텍스트 제공 */}
                                             <td style={{ padding: "4px", color: "#6b7280", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.remark}>{item.remark}</td>
                                         </tr>
