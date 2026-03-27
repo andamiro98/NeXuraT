@@ -64,8 +64,16 @@ export function useGanttEvents(
             changeZoomBy(dir);
         };
 
+        // 행 재정렬(세로 드래그)만 차단
+        const blockRowReorder = (ev: any) => {
+            if (typeof ev?.top !== "undefined") {
+                return false;
+            }
+        };
+
         api.on("update-task", handleUpdate);
         api.on("zoom-scale", handleZoom);
+        api.intercept("drag-task", blockRowReorder);
 
         return () => {
             if (typeof api.off === "function") {
@@ -74,6 +82,13 @@ export function useGanttEvents(
             } else if (typeof api.detach === "function") {
                 api.detach("update-task", handleUpdate);
                 api.detach("zoom-scale", handleZoom);
+            }
+
+            // intercept 해제
+            if (typeof api.detach === "function") {
+                api.detach("drag-task", blockRowReorder);
+            } else if (typeof api.off === "function") {
+                api.off("drag-task", blockRowReorder);
             }
         };
     }, [api, setRows, rebuildFromRows, changeZoomBy]);
