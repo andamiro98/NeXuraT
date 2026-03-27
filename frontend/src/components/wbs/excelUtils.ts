@@ -35,6 +35,29 @@ export function formatMoney(value: unknown): string {
     return new Intl.NumberFormat("ko-KR").format(toNumber(value));
 }
 
+// 엑셀 날짜를 YYYY-MM-DD 형태로 안전하게 파싱하는 헬퍼 함수
+export function parseExcelDateOrString(value: unknown): string | null {
+    if (value === null || value === undefined || value === "") return null;
+    
+    // 만약 Excel 내부 시리얼 넘버 형태로 날짜가 들어왔다면 문자열로 역산 (예: 45000 -> 2023-03-??)
+    if (typeof value === "number") {
+        const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+        const dateObj = new Date(excelEpoch.getTime() + value * 86400 * 1000);
+        const yyyy = dateObj.getUTCFullYear();
+        const mm = String(dateObj.getUTCMonth() + 1).padStart(2, "0");
+        const dd = String(dateObj.getUTCDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
+    }
+
+    // 텍스트 형태의 날짜일 경우 (예: "2023-01-01", "2023.01.01", "2023/01/01")
+    const str = String(value).trim();
+    if (/^\d{4}[-./]\d{2}[-./]\d{2}$/.test(str)) {
+        return str.replace(/[./]/g, "-");
+    }
+
+    return str;
+}
+
 // 엑셀 전체 행들 중에서 "WBS Lv"가 들어있는 헤더 행을 찾는다.
 // 업로드 파일마다 맨 위에 제목행, 공백행 등이 있을 수 있어서
 // 헤더가 반드시 0번째 줄에 있다는 보장이 없다.
@@ -95,11 +118,13 @@ export function resolveColumnIndexes(headers: string[]) {
         materialAmount: findIndex("재료비금액"),
         laborAmount: findIndex("노무비금액"),
         expenseAmount: findIndex("경비금액"),
-        // 추가(PDM 로직 테스트)
-        predecessorCode: findIndex("선행작업"),
-        lag: findIndex("간격"),
-        relationType: findIndex("관계유형"),
-        duration: findIndex("기간"),
+        // 추가(PDM 로직 테스트) - 사용자 업로드 엑셀의 3/4번째 줄 헤더 명칭 병합 결과 반영
+        startDate: findIndex("착수일", "계획착수일", "일정착수일", "작업일정착수일"),
+        endDate: findIndex("종료일", "계획종료일", "일정종료일", "작업일정종료일"),
+        predecessorCode: findIndex("선행작업", "선행작업액티비티", "작업관계선행작업", "액티비티"),
+        lag: findIndex("간격", "선행작업간격", "작업관계간격"),
+        relationType: findIndex("관계유형", "선행작업관계유형", "작업관계관계유형"),
+        duration: findIndex("기간", "계획기간(일)", "기간(일)"),
 
         // 내역(Detail)용 추가 필드
         // 엑셀의 헤더 텍스트를 기반으로 실제 데이터가 위치한 열 번호를 찾습니다.
@@ -203,6 +228,8 @@ export function buildNodeTree(
             children: [], // 현재 노드의 하위 레벨(자식) 노드들을 저장할 배열
 
             // 추가(PDM 로직 테스트)
+            startDate: parseExcelDateOrString(row[columnIndexes.startDate]), // 파싱 모듈을 통해 확실한 Date String 확보
+            endDate: parseExcelDateOrString(row[columnIndexes.endDate]),
             predecessorCode: cleanText(row[columnIndexes.predecessorCode]), // 먼저 수행해야 하는 선행작업의 식별 코드
             lag: cleanText(row[columnIndexes.lag]), // 선행작업 종료 후 후행작업 착수까지의 지연 기간 (Lag)
             relationType: cleanText(row[columnIndexes.relationType]), // 선행작업과의 관계 유형 (예: FS, SS, FF, SF)
@@ -265,8 +292,8 @@ export function flattenTreeToEditableRows(roots: NodeTreeItem[]): EditableWbsRow
             laborAmount: node.laborAmount, // 공종의 노무비
             expenseAmount: node.expenseAmount, // 공종의 경비
 
-            startDate: `${new Date().getFullYear()}-01-01`, // 기본 착수일 설정 (엑셀 파싱 시 현재 년도의 1월 1일로 세팅)
-            endDate: `${new Date().getFullYear()}-01-01`, // 기본 종료일 설정 (엑셀 파싱 시 현재 년도의 1월 1일로 세팅)
+            startDate: node.startDate || `${new Date().getFullYear()}-01-01`, // 엑셀에서 추출한 날짜가 있으면 우선 적용, 없으면 기본값 세팅
+            endDate: node.endDate || `${new Date().getFullYear()}-01-01`, // 엑셀에서 추출한 날짜가 있으면 우선 적용, 없으면 기본값 세팅
             // durationDays: null,
 
             durationDays: node.duration || null, // 작업 처리 소요 기간 (숫자 변환 및 일정 연산 목적 활용)
