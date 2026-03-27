@@ -315,6 +315,56 @@ export function useGanttState() {
         reader.readAsArrayBuffer(file);
     };
 
+    // levelFilter:
+    // - 현재 선택된 WBS 레벨 필터 (Set<number>)
+    // - 비어 있으면 전체 레벨 표시, 값이 있으면 해당 레벨만 표시
+    const [levelFilter, setLevelFilter] = useState<Set<number>>(new Set());
+
+    // availableLevels:
+    // - rows에서 실제로 존재하는 레벨 번호 목록 (오름차순)
+    const availableLevels = useMemo(() => {
+        const levels = new Set(rows.map((r) => r.level));
+        return Array.from(levels).sort((a, b) => a - b);
+    }, [rows]);
+
+    // filteredGanttData:
+    // - levelFilter가 비어 있으면 ganttData 그대로 반환
+    // - 선택된 레벨이 있으면 해당 레벨의 task만 포함
+    // ⚠️ SVAR Gantt null.forEach 방지 핵심 조건:
+    //   1. parent 제거 → 부모 없는 참조 차단
+    //   2. type을 "task"로 강제 → "summary" 타입은 SVAR가 자식 배열 탐색을 시도하는데
+    //      필터 후 자식이 없으면 null.forEach 발생
+    //   3. open: false → 펼쳐진 상태에서 자식 탐색 차단
+    const filteredGanttData = useMemo(() => {
+        if (levelFilter.size === 0) return ganttData;
+
+        const rowMap = new Map(rows.map((r) => [r.id, r]));
+
+        const filteredTasks = ganttData.tasks
+            .filter((task: any) => {
+                const row = rowMap.get(task.id);
+                if (!row) return false;
+                return levelFilter.has(row.level);
+            })
+            .map((task: any) => {
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { parent: _p, ...rest } = task;
+                return {
+                    ...rest,
+                    type: "task" as const,  // summary → task 강제 (자식 탐색 차단)
+                    open: false,             // 펼침 상태 초기화
+                };
+            });
+
+        const filteredTaskIds = new Set(filteredTasks.map((t: any) => t.id));
+
+        const filteredLinks = ganttData.links.filter((link: any) =>
+            filteredTaskIds.has(link.source) && filteredTaskIds.has(link.target)
+        );
+
+        return { tasks: filteredTasks, links: filteredLinks };
+    }, [ganttData, levelFilter, rows]);
+
     const [cpmError, setCpmError] = useState<string | null>(null);
 
     const handleCpmCalculation = useCallback(() => {
@@ -370,6 +420,10 @@ export function useGanttState() {
         setCalendarRange,
         cpmError,
         setCpmError,
-        handleCpmCalculation
+        handleCpmCalculation,
+        levelFilter,
+        setLevelFilter,
+        availableLevels,
+        filteredGanttData
     };
 }

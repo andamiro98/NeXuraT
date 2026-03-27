@@ -1,5 +1,6 @@
 import React from "react";
 import type { SummaryInfo } from "../../types";
+import WbsLevelFilter from "./WbsLevelFilter";
 
 interface GanttHeaderProps {
     onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -10,6 +11,11 @@ interface GanttHeaderProps {
     onCpmCalculationClick: () => void;
     isCpmDisabled: boolean;
     cpmError: string | null;
+    // 레벨 필터
+    availableLevels: number[];
+    levelFilter: Set<number>;
+    onLevelFilterChange: (level: number) => void;
+    onLevelFilterReset: () => void;
 }
 
 export default function GanttHeader({
@@ -21,6 +27,10 @@ export default function GanttHeader({
     onCpmCalculationClick,
     isCpmDisabled,
     cpmError,
+    availableLevels,
+    levelFilter,
+    onLevelFilterChange,
+    onLevelFilterReset,
 }: GanttHeaderProps) {
     return (
         <>
@@ -60,6 +70,14 @@ export default function GanttHeader({
                     </div>
                 </div>
             </div>
+
+            {/* 레벨 필터 바 (별도 컴포넌트) */}
+            <WbsLevelFilter
+                availableLevels={availableLevels}
+                levelFilter={levelFilter}
+                onLevelToggle={onLevelFilterChange}
+                onReset={onLevelFilterReset}
+            />
 
             {cpmError && (
                 <div style={{ padding: "8px 24px", backgroundColor: "#fef2f2", borderBottom: "1px solid #fca5a5", color: "#dc2626", fontSize: "0.875rem" }}>
