@@ -1,4 +1,4 @@
-import type { RelationType, EditableWbsRow } from "../../types";
+import type { RelationType } from "../../types";
 import { toDateInputValue } from "../../scheduleUtils";
 
 /**

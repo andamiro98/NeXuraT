@@ -98,7 +98,7 @@ export function getCalendarRangeFromRows(rows: EditableWbsRow[]): { start: Date;
     const dates = rows.flatMap((row) => {
         const start = toSafeDate(row.startDate);
         const end = toSafeDate(row.endDate);
-        return [start, end].filter(Boolean) as Date[];
+        return [start, end].filter(Boolean) as Date[]; // truthy 값
     });
 
     if (dates.length === 0) return getCalendarRange();
@@ -110,8 +110,8 @@ export function getCalendarRangeFromRows(rows: EditableWbsRow[]): { start: Date;
     const maxDate = new Date(maxTime);
 
     return {
-        start: new Date(minDate.getFullYear(), minDate.getMonth() - 1, 1),
-        end: new Date(maxDate.getFullYear(), maxDate.getMonth() + 2, 0),
+        start: new Date(minDate.getFullYear(), minDate.getMonth() - 1, 1), // 최소 날짜가 속한 달의 한 달 전 1일
+        end: new Date(maxDate.getFullYear(), maxDate.getMonth() + 2, 0), // 최대 날짜가 속한 달의의 한 달 후 마지막 일
     };
 }
 
@@ -125,29 +125,33 @@ export function buildScheduledGanttData(rows: EditableWbsRow[]): {
         if (row.wbsCode) codeMap.set(row.wbsCode, row.id);
     }
 
-    const { start: calStart } = getCalendarRangeFromRows(rows);
+    // const { start: calStart } = getCalendarRangeFromRows(rows);
 
     const tasks: GanttTaskItem[] = rows.map((row) => {
         const rowStart = toSafeDate(row.startDate);
         const rowEnd = toSafeDate(row.endDate);
 
-        let parsedStart = rowStart ?? rowEnd ?? calStart;
-        let parsedEnd = rowEnd ?? rowStart ?? calStart;
+        let parsedStart = rowStart! ; // ?? calStart
+        let parsedEnd = rowEnd! ;
 
-        // 종료일이 착수일보다 빠르면 간트 렌더링 오류를 막기 위해 착수일과 동일하게 맞춘다.
+        // 종료일이 착수일보다 빠르면 간트 렌더링 오류를 막기 위해 착수일과 동일하게
         if (parsedEnd.getTime() < parsedStart.getTime()) {
             parsedEnd = new Date(parsedStart);
         }
 
+        // 착수일부터 종료일까지 계산
         const durationDays = computeDurationDays(
             toDateInputValue(parsedStart),
             toDateInputValue(parsedEnd)
         );
+
+        // 공휴일 등 뺸 영업일 계산
         const durationGanttDays = computeGanttDurationDays(
             toDateInputValue(parsedStart),
             toDateInputValue(parsedEnd)
         );
 
+        // console.log("durationDays", durationDays, "durationGanttDays", durationGanttDays);
 
         const taskItem: GanttTaskItem = {
             id: row.id,
@@ -193,13 +197,13 @@ export function buildScheduledGanttData(rows: EditableWbsRow[]): {
 
         // 작성된 쉼표(,)를 기준으로 문자열을 잘라낸 후 개별 요소의 좌우 공백을 제거하고 빈 문자열 필터링
         const predCodes = row.predecessorCode.split(",").map(s => s.trim()).filter(Boolean);
-        // 관계 유형 역시 쉼표로 자릅니다. 해당 위치 요소가 비정상 포맷이면 기본 관계유형인 "FS" 할당
+        // 관계 유형 쉼표로 구분, 해당 위치 요소가 비정상 포맷이면 기본 관계유형인 "FS" 할당
         const relTypes = String(row.relationType ?? "").split(",").map(v => {
             const u = v.trim().toUpperCase();
             if (u === "FS" || u === "SS" || u === "FF" || u === "SF") return u as RelationType;
             return "FS" as RelationType;
         });
-        // 지연 기간(Lag) 값이 문자이거나 비어있으면 모두 정수 0으로 강제 형변환 처리
+        // 간격(Lag) 값이 문자이거나 비어있으면 모두 정수 0으로 강제 형변환 처리
         const lagValues = String(row.lag ?? "").split(",").map(v => v.trim()).map(v => {
             const n = parseInt(v, 10);
             return Number.isNaN(n) ? 0 : n;

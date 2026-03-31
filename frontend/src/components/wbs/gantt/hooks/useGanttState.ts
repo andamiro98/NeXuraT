@@ -30,14 +30,14 @@ import { calculateCpm } from "../../pdmUtils";
 export function useGanttState() {
     // rows:
     // - 엑셀에서 읽은 뒤 화면 편집 기준이 되는 원본 행 데이터
-    // - 착수일, 종료일, 금액, 선행작업, 관계유형, Lag 같은 값이 들어 있음
-    // - CustomTaskEditor와 상단 개수 표시도 이 rows를 기준으로 동작한다.
+    // - 착수일, 종료일, 금액, 선행작업, 관계유형, Lag 같은 값
+    // - CustomTaskEditor와 상단 개수 표시도 이 rows를 기준으로 동작
     const [rows, setRows] = useState<EditableWbsRow[]>([]);
 
     // summary:
     // - 엑셀 파싱 후 상단에 보여줄 요약 수치
     // - createdNodeCount: 생성된 공종(노드) 수
-    // - ignoredDetailRows: 트리 생성 과정에서 무시된 상세 행 수
+    // - ignoredDetailRows: 트리 생성 과정에서 무시된 "상세(내역)" 행 수
     const [summary, setSummary] = useState<SummaryInfo>({
         createdNodeCount: 0,
         ignoredDetailRows: 0
@@ -58,7 +58,8 @@ export function useGanttState() {
         links: []
     });
 
-    const [showColumnPopup, setShowColumnPopup] = useState(false); // 좌측 그리드에 어떤 열(컬럼)들을 띄울지 선택하는 설정 팝업창 활성화 상태
+    // 좌측 그리드에 어떤 열(컬럼)들을 띄울지 선택하는 설정 팝업창 활성화 상태
+    const [showColumnPopup, setShowColumnPopup] = useState(false);
 
     // columnConfig:
     // - 왼쪽 그리드에 표시할 컬럼 목록의 순서와 visible 상태를 관리
@@ -105,7 +106,7 @@ export function useGanttState() {
     // - 전체 zoom 설정 객체(levels, scales, css 함수)는 코드 안의 템플릿을 그대로 사용
     const zoomTemplate = useMemo(() => createInitialZoomConfig(), []);
 
-    // localStorage 없이 현재 화면 안에서만 zoom 상태를 유지한다.
+    // zoom 상태 유지
     const [zoomLevel, setZoomLevel] = useState<number>(zoomTemplate.level ?? 4);
 
     // Ctrl + wheel 등으로 들어오는 줌 방향값(+ / -)만 받아서
@@ -156,11 +157,11 @@ export function useGanttState() {
     }, []);
 
     // rows -> ganttData 변환 함수
-    // nextRows를 받아 task / link를 다시 만든 뒤 setGanttData까지 수행한다.
+    // nextRows를 받아 task / link를 다시 만든 뒤 setGanttData까지 수행
     // 상태 변경 지점마다 이 함수를 재사용해서 변환 규칙을 한 곳에 모은다.
     const rebuildFromRows = useCallback((nextRows: EditableWbsRow[]) => {
         // 1. scheduleUtils에서 기본 task 배열과 link 배열 생성
-        // buildScheduledGanttData는 row 데이터를 gantt 라이브러리 형식으로 1차 변환한다.
+        // buildScheduledGanttData는 row 데이터를 gantt 라이브러리 형식으로 1차 변환
         const { tasks, links } = buildScheduledGanttData(nextRows);
 
         // 2. task.id로 원본 row를 빠르게 찾기 위한 Map 생성
@@ -251,41 +252,35 @@ export function useGanttState() {
 
         reader.onload = (evt) => {
             const result = evt.target?.result;
-            if (!(result instanceof ArrayBuffer)) return;
+            if (!(result instanceof ArrayBuffer)) return; //  readAsText X  Binary Data O
 
-            const data = new Uint8Array(result);
-            const wb = XLSX.read(data, { type: "array" });
-            const wsname = wb.SheetNames[0];
-            const ws = wb.Sheets[wsname];
-            const sheetData = XLSX.utils.sheet_to_json(ws, { header: 1 });
-
+            const data = new Uint8Array(result); // byte array
+            const wb = XLSX.read(data, { type: "array" }); // XLSX 라이브러리로 Workbook(엑셀 파일 전체) 객체 읽기
+            const wsname = wb.SheetNames[0]; // Worksheet Name
+            const ws = wb.Sheets[wsname]; // Worksheet
+            const sheetData = XLSX.utils.sheet_to_json(ws, { header: 1 }); // 2차원(header 1) 객체 배열 [[],[],....]
+            // console.log("sheetData", sheetData);
             try {
-                const headerIdx = findHeaderRowIndex(sheetData as any[]);
+                const headerIdx = findHeaderRowIndex(sheetData as any[]);   // WBSLv 컬럼명 찾기
                 if (headerIdx !== -1) {
-                    const headers = buildMergedHeaders(
+                    const headers = buildMergedHeaders( // 헤더 병합
                         sheetData[headerIdx] as any,
                         sheetData[headerIdx + 1] as any
                     );
-                    const cols = resolveColumnIndexes(headers);
+                    const cols = resolveColumnIndexes(headers); // 컬럼 {Key:index}
                     const {
                         roots,
                         createdNodeCount,
                         ignoredDetailRows
-                    } = buildNodeTree(sheetData as any[], cols);
+                    } = buildNodeTree(sheetData as any[], cols);    // 트리 구조
 
-                    const newRows: EditableWbsRow[] = flattenTreeToEditableRows(roots).map(
+                    const newRows: EditableWbsRow[] = flattenTreeToEditableRows(roots).map( // 1차원 행 배열로 변환
                         (row): EditableWbsRow => {
                             const startDate = toDateInputValue(row.startDate);
                             const endDate = toDateInputValue(row.endDate);
-                            const rawDur = row.durationDays;
+                            // const rawDur = row.durationDays; // excel에 기간 안가져옴 computed 있으므로 필요 X
                             const computed = computeDurationDays(startDate, endDate);
-
-                            const durationDays: string | null =
-                                rawDur != null && rawDur !== ""
-                                    ? String(rawDur)
-                                    : computed != null
-                                        ? String(computed)
-                                        : null;
+                            const durationDays: string | null = computed ? String(computed): null;
 
                             return {
                                 ...row,

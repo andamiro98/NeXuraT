@@ -9,6 +9,14 @@ import { computeDurationDays } from "../../scheduleUtils";
 
 import type { ColumnConfig } from "../../ColumnSettingsPopup";
 
+/**
+ *
+ * @param api   SVAR Gantt에서 init 콜백을 통해 전달되는 API
+ * @param setRows
+ * @param rebuildFromRows
+ * @param changeZoomBy
+ * @param setColumnConfig
+ */
 export function useGanttEvents(
     api: any,
     setRows: React.Dispatch<React.SetStateAction<EditableWbsRow[]>>,
@@ -24,15 +32,15 @@ export function useGanttEvents(
 
         // 간트 내부의 트리그리드 컬럼 사이즈 조절 완료 이벤트 핸들러
         const handleResizeColumn = (ev: any) => {
-            if (ev.inProgress) return; // 사용자가 좌우로 마우스를 계속 드래그 중인 미완료 상태일 때는 잦은 렌더링 방지를 위해 무시합니다.
-            
+            if (ev.inProgress) return; // 사용자가 좌우로 마우스를 계속 드래그 중인 미완료 상태일 때는 잦은 렌더링 방지를 위해 무시
+
             setColumnConfig((prev) => {
-                const colIdx = prev.findIndex((c) => c.id === ev.id); // 변경된 대상 컬럼이 상태 배열의 몇 번째에 있는지 찾습니다.
+                const colIdx = prev.findIndex((c) => c.id === ev.id); // 변경된 대상 컬럼이 상태 배열의 몇 번째에 있는지 찾음
                 // 컬럼이 목록에 존재하고, 변경된 사이즈가 기존 상태에 반영된 사이즈와 실제 차이가 있는 유효한 상황일 경우 동작
                 if (colIdx >= 0 && ev.width !== undefined && prev[colIdx].width !== ev.width) {
                     const next = [...prev]; // 불변성(Immutability)을 유지하며 리액트 방식대로 배열 복제
                     next[colIdx] = { ...next[colIdx], width: ev.width }; // 새로 적용될 넓이(width) 속성을 덮어씌움
-                    return next; // 변경된 배열 상태로 반환하여 재런더링을 트리거합니다.
+                    return next; // 변경된 배열 상태로 반환하여 재런더링을 트리거
                 }
                 return prev; // 변동이 없다면 이전 상태 주소값을 그대로 반환하여 불필요 연산 차단
             });
@@ -43,7 +51,7 @@ export function useGanttEvents(
             if (!isMounted) return; // 비동기 대기 중 이미 다른 페이지로 빠져나가 마운트 해제되었다면 무시 처리
             if (ta) {
                 tableApi = ta; // Grid API 인스턴스 객체를 언마운트 Cleanup용으로 글로벌 변수에 저장
-                tableApi.on("resize-column", handleResizeColumn); // 넓이가 변경되는 네이티브 이벤트를 감지하도록 핸들러를 연결합니다.
+                tableApi.on("resize-column", handleResizeColumn); // 넓이가 변경되는 네이티브 이벤트를 감지하도록 핸들러를 연결
             }
         });
 
@@ -109,7 +117,7 @@ export function useGanttEvents(
 
         return () => {
             isMounted = false; // 컴포넌트 언마운트 시 안전을 위해 Flag 비활성화
-            
+
             if (typeof api.off === "function") {
                 api.off("update-task", handleUpdate);
                 api.off("zoom-scale", handleZoom);

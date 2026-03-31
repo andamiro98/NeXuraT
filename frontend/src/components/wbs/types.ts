@@ -90,7 +90,7 @@ export interface EditableWbsRow {
     duration: string; // 엑셀을 통해 임포트 시 받아온 순수 텍스트 형식의 기간 수치 원본
 
     // 선행작업 / 관계유형 / Lag
-    predecessorCode: string; // 스케줄 제약이 걸린 경우 참조되는 먼저 이루어져야 할 선행작업의 고유 코드
+    predecessorCode: string; // 스케줄 제약이 걸린 경우 참조되는 먼저 이루어져야 할 선행작업의 고유 WBS코드
     relationType: string; // 선행작업 대비 어떠한 선/후 연결성을 가지는지 나타내는 형태(FS, SS, SF, FF)
     lag: string; // 선행작업 완료~본 작업 시작 등 기준 시점에 의도적으로 가하는 대기 및 연기 시간(Lag)
 

@@ -101,7 +101,7 @@ export function buildMergedHeaders(
             mergedHeaders.push(top || currentGroup);
         }
     }
-
+    // console.log("mergedHeaders", mergedHeaders);
     return mergedHeaders;
 }
 
@@ -130,8 +130,8 @@ export function resolveColumnIndexes(headers: string[]) {
         spec: findIndex("규격", "품명/규격"),
         quantity: findIndex("수량"),
         unit: findIndex("단위"),
-        totalUnitPrice: findIndex("합계단가", "단가"),
-        totalAmountDetail: findIndex("합계금액", "금액"),
+        totalUnitPrice: findIndex("합계단가"),
+        totalAmountDetail: findIndex("합계금액"),
         materialUnitPrice: findIndex("재료비단가"),
         materialAmountDetail: findIndex("재료비금액"),
         laborUnitPrice: findIndex("노무비단가"),
@@ -141,10 +141,9 @@ export function resolveColumnIndexes(headers: string[]) {
         remark: findIndex("비고"),
     };
 
-    // 필수 컬럼이 없으면 즉시 에러를 발생시킨다.
-    // 단, 선행작업/관계유형/간격/기간 같은 선택 컬럼은 없어도 됌.
-    const requiredColumnKeys = ["wbsLevel", "wbsCode", "workName"];
-    const missingColumns = Object.entries(columnIndexes)
+    // 필수 컬럼이 없으면 즉시 에러를 발생
+    const requiredColumnKeys = ["wbsLevel", "wbsCode", "workName"]; // 필수 컬럼
+    const missingColumns = Object.entries(columnIndexes) // 객체 자체의 enumerable 속성 [key, value] 쌍의 배열을 반환
         .filter(([key, index]) => index === -1 && requiredColumnKeys.includes(key))
         .map(([key]) => key);
 
@@ -153,19 +152,18 @@ export function resolveColumnIndexes(headers: string[]) {
             `필수 컬럼을 찾지 못했습니다: ${missingColumns.join(", ")}`
         );
     }
-
     return columnIndexes;
 }
 
 // 엑셀 행들을 실제 트리 구조(NodeTreeItem[])로 변환
-// 이 함수가 WBS Lv 기반 트리 생성의 핵심
+// WBS Lv 기반 트리 생성의 핵심
 export function buildNodeTree(
     rows: ExcelRow[],
     columnIndexes: ReturnType<typeof resolveColumnIndexes>
 ) {
     const roots: NodeTreeItem[] = [];
 
-    // stack은 "현재 레벨별 마지막 노드"를 기억하는 배열이다.
+    // stack은 "현재 레벨별 마지막 노드"를 기억하는 배열
     // 예: stack[0] = 현재 레벨1 노드, stack[1] = 현재 레벨2 노드 ...
     const stack: NodeTreeItem[] = [];
 
@@ -174,13 +172,11 @@ export function buildNodeTree(
     let sequence = 1;
 
     rows.forEach((row) => {
-        const rawLevel = row[columnIndexes.wbsLevel];
-
+        const rawLevel = row[columnIndexes.wbsLevel]; // wbsLevel : 0 (엑셀 기준 wbsLevel(0번째 행) 행이 있는 열 index의 값)
         if (rawLevel === null || rawLevel === undefined || rawLevel === "") return;
 
         const levelText = String(rawLevel).trim();
 
-        // 사용자가 요구한 로직:
         // WBS Lv가 "내역"이면 가장 최근 부모(스택의 마지막 노드)의 detailItems에 추가
         // 스택(stack)은 부모-자식 계층을 추적하는 배열이며, 여기서 방금 전까지 처리된 일반 WBS 아이템
         if (levelText === "내역") {
@@ -210,7 +206,7 @@ export function buildNodeTree(
         }
 
         const level = Number(rawLevel);
-        if (!Number.isFinite(level)) return;
+        if (!Number.isFinite(level)) return; // 유한수 판별
 
         const node: NodeTreeItem = {
             internalId: sequence++, // 시스템에서 노드를 구분하는 고유 식별 번호 (1번부터 순차 증가)
@@ -225,7 +221,7 @@ export function buildNodeTree(
             expenseAmount: toNumber(row[columnIndexes.expenseAmount]), // 경비 금액
             children: [], // 현재 노드의 하위 레벨(자식) 노드들을 저장할 배열
 
-            // 추가(PDM 로직 테스트)
+            // PDM 로직 테스트
             startDate: parseExcelDateOrString(row[columnIndexes.startDate]), // 파싱 모듈을 통해 확실한 Date String 확보
             endDate: parseExcelDateOrString(row[columnIndexes.endDate]),
             predecessorCode: cleanText(row[columnIndexes.predecessorCode]), // 먼저 수행해야 하는 선행작업의 식별 코드
@@ -305,5 +301,6 @@ export function flattenTreeToEditableRows(roots: NodeTreeItem[]): EditableWbsRow
     }
 
     roots.forEach((root) => walk(root, 0));
+    // console.log("flattenTreeToEditableRows", result);
     return result;
 }
