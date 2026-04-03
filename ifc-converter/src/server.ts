@@ -1,6 +1,9 @@
 import express from "express";
 import cors from "cors";
+import fs from "fs";
+import path from "path";
 import { convertIfcToFrag } from "./converter";
+import { convertLargeIfc } from "./converter-chunked";
 
 const app = express();
 const PORT = 3001;
@@ -28,23 +31,53 @@ app.post("/convert", async (req, res) => {
     });
   }
 
+  const resolvedIfcPath = path.resolve(ifcPath);
+  const resolvedFragPath = path.resolve(fragPath);
+
   console.log(`[변환 시작] fileId=${fileId}`);
-  console.log(`  IFC: ${ifcPath}`);
-  console.log(`  출력: ${fragPath}`);
+  console.log(` IFC(raw): ${ifcPath}`);
+  console.log(` IFC(resolved): ${resolvedIfcPath}`);
+  console.log(` 출력(raw): ${fragPath}`);
+  console.log(` 출력(resolved): ${resolvedFragPath}`);
 
   try {
     const startTime = Date.now();
-    await convertIfcToFrag(ifcPath, fragPath);
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    const fileSize = fs.statSync(resolvedIfcPath).size;
+    const TWO_GB = 2 * 1024 * 1024 * 1024;
 
-    console.log(`[변환 완료] fileId=${fileId} (${elapsed}초)`);
+    if (fileSize <= TWO_GB) {
+      // 2GB 이하: 기존 직접 변환
+      console.log(`[변환 모드] 직접 변환 (${(fileSize / (1024 * 1024)).toFixed(0)}MB)`);
+      await convertIfcToFrag(resolvedIfcPath, resolvedFragPath);
 
-    return res.json({
-      status: "COMPLETED",
-      fileId,
-      fragPath,
-      elapsedSeconds: elapsed,
-    });
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`[변환 완료] fileId=${fileId} (${elapsed}초)`);
+
+      return res.json({
+        status: "COMPLETED",
+        fileId,
+        fragPath,
+        elapsedSeconds: elapsed,
+      });
+    } else {
+      // 2GB 초과: 분할 변환
+      console.log(`[변환 모드] 분할 변환 (${(fileSize / (1024 * 1024 * 1024)).toFixed(2)}GB)`);
+      const outputDir = path.dirname(resolvedFragPath);
+      const result = await convertLargeIfc(resolvedIfcPath, outputDir, fileId);
+
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`[분할 변환 완료] ${result.message} (${elapsed}초)`);
+
+      return res.json({
+        status: result.success ? "COMPLETED" : "FAILED",
+        fileId,
+        fragFiles: result.fragFiles,
+        totalChunks: result.totalChunks,
+        failedChunks: result.failedChunks,
+        elapsedSeconds: elapsed,
+        message: result.message,
+      });
+    }
   } catch (error: any) {
     console.error(`[변환 실패] fileId=${fileId}`, error);
 

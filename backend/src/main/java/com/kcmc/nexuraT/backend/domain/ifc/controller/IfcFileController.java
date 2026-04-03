@@ -66,4 +66,21 @@ public class IfcFileController {
                         "attachment; filename=\"" + fileId + ".frag\"")
                 .body(resource);
     }
+
+    /**
+     * 4-1단계: 분할 변환 시 특정 청크 .frag 다운로드
+     */
+    @GetMapping("/{fileId}/frag/{chunkIndex}")
+    public ResponseEntity<Resource> downloadChunkFragFile(
+            @PathVariable String fileId,
+            @PathVariable int chunkIndex) {
+
+        Resource resource = ifcFileService.getFragFileByIndex(fileId, chunkIndex);
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + fileId + "_" + chunkIndex + ".frag\"")
+                .body(resource);
+    }
 }

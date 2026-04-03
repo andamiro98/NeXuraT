@@ -5,7 +5,7 @@ import * as OBC from "@thatopen/components";
  * IFC 파일을 .frag(Fragment) 파일로 변환한다.
  *
  * 이 함수는 독립적이므로:
- *   - Express 서버에서 HTTP로 호출 가능 (현재 구조)
+ *   - 서버에서 HTTP로 호출 가능 (현재 구조)
  *   - Electron 메인 프로세스에서 직접 import 가능 (추후 확장)
  *   - CLI 도구로도 사용 가능
  *
@@ -64,10 +64,7 @@ export async function convertIfcToFrag(
  *  API 참고 사항 (@thatopen/components-back v2.x)
  * ============================================================
  *
- *  That Open 라이브러리의 Node.js 백엔드 API는 활발히 개발 중이며,
- *  버전에 따라 클래스명이나 메서드가 다를 수 있습니다.
  *
- *  대안 접근법 (버전에 따라):
  *
  *  1) IfcLoader 직접 사용:
  *     const loader = components.get(OBC.IfcLoader);

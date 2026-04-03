@@ -5,6 +5,7 @@ import {
   requestConversion,
   pollUntilComplete,
   downloadFragAsBuffer,
+  downloadChunkFragAsBuffer,
   type ConversionStatusResponse,
 } from "../../../api/ifcApi";
 
@@ -120,34 +121,55 @@ export default function IfcServerViewer({ height = "100vh" }: IfcServerViewerPro
       setStatus("서버에서 IFC → .frag 변환 요청 중...");
       await requestConversion(uploadResult.fileId);
 
-      // 3. 폴링
+      // 3. 폴링 — 변환 완료 대기
       setStatus("서버에서 변환 중...");
+      let finalStatus: ConversionStatusResponse | null = null;
       await new Promise<void>((resolve, reject) => {
         pollUntilComplete(uploadResult.fileId, (convStatus: ConversionStatusResponse) => {
           if (convStatus.progressPercent) {
             setStatus(`변환 중... ${convStatus.progressPercent}%`);
           }
-          if (convStatus.status === "COMPLETED") resolve();
-          else if (convStatus.status === "FAILED")
+          if (convStatus.status === "COMPLETED") {
+            finalStatus = convStatus;
+            resolve();
+          } else if (convStatus.status === "FAILED")
             reject(new Error(convStatus.message || "변환 실패"));
         });
       });
 
-      // 4. .frag 다운로드
-      setPhase("downloading");
-      setStatus(".frag 파일 다운로드 중...");
-      const fragBuffer = await downloadFragAsBuffer(uploadResult.fileId);
-
-      // 5. 뷰어에 로드
-      setPhase("loading");
-      setStatus("3D 모델 로딩 중...");
-
+      // 4. .frag 다운로드 & 로드
       const components = componentsRef.current;
       const fragments = components.get(OBC.FragmentsManager);
-      const fragData = new Uint8Array(fragBuffer);
 
-      await fragments.core.load(fragData, { modelId: selectedFile.name });
-      await fragments.core.update(true);
+      // 분할 변환인 경우 (fragDownloadUrls가 있을 때)
+      const fragUrls = finalStatus?.fragDownloadUrls;
+      if (fragUrls && fragUrls.length > 1) {
+        setPhase("downloading");
+        setStatus(`분할 .frag 다운로드 중 (${fragUrls.length}개)...`);
+
+        for (let i = 0; i < fragUrls.length; i++) {
+          setStatus(`청크 ${i + 1}/${fragUrls.length} 다운로드 중...`);
+          const buffer = await downloadChunkFragAsBuffer(uploadResult.fileId, i);
+
+          setStatus(`청크 ${i + 1}/${fragUrls.length} 로딩 중...`);
+          const fragData = new Uint8Array(buffer);
+          await fragments.core.load(fragData, {
+            modelId: `${selectedFile.name}_chunk_${i}`,
+          });
+          await fragments.core.update(true);
+        }
+      } else {
+        // 단일 .frag
+        setPhase("downloading");
+        setStatus(".frag 파일 다운로드 중...");
+        const fragBuffer = await downloadFragAsBuffer(uploadResult.fileId);
+
+        setPhase("loading");
+        setStatus("3D 모델 로딩 중...");
+        const fragData = new Uint8Array(fragBuffer);
+        await fragments.core.load(fragData, { modelId: selectedFile.name });
+        await fragments.core.update(true);
+      }
 
       // 카메라 맞추기
       const worlds = components.get(OBC.Worlds);

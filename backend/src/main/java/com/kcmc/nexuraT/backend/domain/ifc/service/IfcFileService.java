@@ -42,15 +42,14 @@ public class IfcFileService {
         String originalName = file.getOriginalFilename();
 
         try {
-            Path uploadDir = Paths.get(basePath, "uploads");
+            Path baseDir = Paths.get(basePath).toAbsolutePath().normalize();
+            Path uploadDir = baseDir.resolve("uploads");
             Files.createDirectories(uploadDir);
 
             Path targetPath = uploadDir.resolve(fileId + ".ifc");
 
-            // 스트리밍 저장 (8MB 버퍼)
             try (InputStream in = file.getInputStream();
                  OutputStream out = Files.newOutputStream(targetPath)) {
-
                 byte[] buffer = new byte[8 * 1024 * 1024];
                 int bytesRead;
                 while ((bytesRead = in.read(buffer)) != -1) {
@@ -63,10 +62,12 @@ public class IfcFileService {
             record.originalName = originalName;
             record.fileSize = Files.size(targetPath);
             record.status = "UPLOADED";
-            record.ifcPath = targetPath.toString();
+            record.ifcPath = targetPath.toAbsolutePath().normalize().toString();
+
             fileRecords.put(fileId, record);
 
-            log.info("IFC 업로드 완료: {} ({}MB)", originalName, record.fileSize / (1024 * 1024));
+            log.info("IFC 업로드 완료: {} ({}MB) path={}",
+                    originalName, record.fileSize / (1024 * 1024), record.ifcPath);
 
             return UploadResponse.builder()
                     .fileId(fileId)
@@ -144,7 +145,39 @@ public class IfcFileService {
             throw new RuntimeException("변환이 아직 완료되지 않았습니다. 상태: " + record.status);
         }
 
+        // 분할 변환인 경우 첫 번째 .frag 반환
+        if (record.fragFiles != null && !record.fragFiles.isEmpty()) {
+            Path fragPath = Paths.get(record.fragFiles.get(0));
+            if (!Files.exists(fragPath)) {
+                throw new RuntimeException(".frag 파일을 찾을 수 없습니다: " + fragPath);
+            }
+            return new FileSystemResource(fragPath);
+        }
+
         Path fragPath = Paths.get(record.fragPath);
+        if (!Files.exists(fragPath)) {
+            throw new RuntimeException(".frag 파일을 찾을 수 없습니다: " + fragPath);
+        }
+        return new FileSystemResource(fragPath);
+    }
+
+    public Resource getFragFileByIndex(String fileId, int chunkIndex) {
+        FileRecord record = getRecord(fileId);
+
+        if (!"COMPLETED".equals(record.status)) {
+            throw new RuntimeException("변환이 아직 완료되지 않았습니다. 상태: " + record.status);
+        }
+
+        if (record.fragFiles == null || record.fragFiles.isEmpty()) {
+            throw new RuntimeException("분할 변환 결과가 없습니다: " + fileId);
+        }
+
+        if (chunkIndex < 0 || chunkIndex >= record.fragFiles.size()) {
+            throw new RuntimeException("청크 인덱스 범위 초과: " + chunkIndex
+                    + " (전체: " + record.fragFiles.size() + ")");
+        }
+
+        Path fragPath = Paths.get(record.fragFiles.get(chunkIndex));
         if (!Files.exists(fragPath)) {
             throw new RuntimeException(".frag 파일을 찾을 수 없습니다: " + fragPath);
         }
@@ -160,7 +193,12 @@ public class IfcFileService {
     }
 
     private String getFragPath(String fileId) {
-        return Paths.get(basePath, "converted", fileId + ".frag").toString();
+        return Paths.get(basePath)
+                .toAbsolutePath()
+                .normalize()
+                .resolve("converted")
+                .resolve(fileId + ".frag")
+                .toString();
     }
 
     static class FileRecord {
@@ -170,5 +208,6 @@ public class IfcFileService {
         String status;
         String ifcPath;
         String fragPath;
+        java.util.List<String> fragFiles;  // 분할 변환 시 여러 .frag 경로
     }
 }

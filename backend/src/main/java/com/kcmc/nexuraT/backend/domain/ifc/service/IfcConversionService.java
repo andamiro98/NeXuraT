@@ -10,8 +10,7 @@ import org.springframework.web.client.RestTemplate;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -37,22 +36,26 @@ public class IfcConversionService {
             String fileId, String ifcPath, String fragPath) {
 
         try {
-            Path outputDir = Paths.get(fragPath).getParent();
+            Path resolvedIfcPath = Paths.get(ifcPath).toAbsolutePath().normalize();
+            Path resolvedFragPath = Paths.get(fragPath).toAbsolutePath().normalize();
+
+            Path outputDir = resolvedFragPath.getParent();
             Files.createDirectories(outputDir);
 
             String url = converterBaseUrl + "/convert";
 
             Map<String, String> requestBody = new HashMap<>();
             requestBody.put("fileId", fileId);
-            requestBody.put("ifcPath", ifcPath);
-            requestBody.put("fragPath", fragPath);
+            requestBody.put("ifcPath", resolvedIfcPath.toString());
+            requestBody.put("fragPath", resolvedFragPath.toString());
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             HttpEntity<Map<String, String>> entity = new HttpEntity<>(requestBody, headers);
 
-            log.info("Node.js 변환 서버에 요청: fileId={}", fileId);
+            log.info("Node.js 변환 서버에 요청: fileId={}, ifcPath={}, fragPath={}",
+                    fileId, resolvedIfcPath, resolvedFragPath);
 
             ResponseEntity<Map> response = restTemplate.exchange(
                     url, HttpMethod.POST, entity, Map.class);
@@ -60,6 +63,18 @@ public class IfcConversionService {
             if (response.getStatusCode() == HttpStatus.OK) {
                 Map body = response.getBody();
                 boolean success = body != null && "COMPLETED".equals(body.get("status"));
+
+                // 분할 변환인 경우 fragFiles 목록 저장
+                if (body != null && body.containsKey("fragFiles")) {
+                    List<String> fragFilesList = (List<String>) body.get("fragFiles");
+                    if (fragFilesList != null && !fragFilesList.isEmpty()) {
+                        log.info("분할 변환 결과: {}개 .frag 파일", fragFilesList.size());
+                        // CompletableFuture에 fragFiles 정보를 전달하기 위해
+                        // 별도 콜백에서 처리 (IfcFileService에서 참조)
+                        return CompletableFuture.completedFuture(success);
+                    }
+                }
+
                 log.info("변환 결과: fileId={}, success={}", fileId, success);
                 return CompletableFuture.completedFuture(success);
             }

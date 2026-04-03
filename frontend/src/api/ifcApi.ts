@@ -20,6 +20,7 @@ export interface ConversionStatusResponse {
   fileId: string;
   status: "UPLOADED" | "CONVERTING" | "COMPLETED" | "FAILED";
   fragDownloadUrl?: string;
+  fragDownloadUrls?: string[];  // 분할 변환 시 여러 .frag URL
   message: string;
   progressPercent?: number;
 }
@@ -102,4 +103,36 @@ export async function downloadFragAsBuffer(fileId: string): Promise<ArrayBuffer>
   const res = await fetch(`${API_BASE}/${fileId}/frag`);
   if (!res.ok) throw new Error(`.frag 다운로드 실패: ${res.status}`);
   return res.arrayBuffer();
+}
+
+/**
+ * 분할 변환 시 특정 청크의 .frag 파일을 다운로드.
+ */
+export async function downloadChunkFragAsBuffer(
+  fileId: string,
+  chunkIndex: number
+): Promise<ArrayBuffer> {
+  const res = await fetch(`${API_BASE}/${fileId}/frag/${chunkIndex}`);
+  if (!res.ok) throw new Error(`.frag 청크 ${chunkIndex} 다운로드 실패: ${res.status}`);
+  return res.arrayBuffer();
+}
+
+/**
+ * 분할 변환 결과의 모든 .frag 청크를 순차 다운로드.
+ * 각 청크 다운로드 완료 시 onChunkLoaded 콜백 호출.
+ */
+export async function downloadAllChunks(
+  fileId: string,
+  totalChunks: number,
+  onChunkLoaded?: (index: number, total: number, buffer: ArrayBuffer) => void
+): Promise<ArrayBuffer[]> {
+  const buffers: ArrayBuffer[] = [];
+
+  for (let i = 0; i < totalChunks; i++) {
+    const buffer = await downloadChunkFragAsBuffer(fileId, i);
+    buffers.push(buffer);
+    onChunkLoaded?.(i, totalChunks, buffer);
+  }
+
+  return buffers;
 }

@@ -12,8 +12,9 @@ import lombok.NoArgsConstructor;
 public class ConversionStatusResponse {
 
     private String fileId;
-    private String status;          // UPLOADED | CONVERTING | COMPLETED | FAILED
-    private String fragDownloadUrl; // 변환 완료 시 다운로드 경로
+    private String status;
+    private String fragDownloadUrl;
     private String message;
     private Integer progressPercent;
+    private java.util.List<String> fragDownloadUrls; // 분할 변환 시 여러 .frag URL
 }
