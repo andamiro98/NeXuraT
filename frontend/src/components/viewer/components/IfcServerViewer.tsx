@@ -17,7 +17,7 @@ import {
  *   FormData로 Spring Boot 서버에 업로드만 함
  *   서버에서 Node.js로 변환된 .frag 파일만 받아서 뷰어에 로드
  *
- * 대용량 IFC (4.99GB+) 에서도 NotReadableError 없이 동작한다.
+ * 대용량 IFC (4.99GB+) 에서도 NotReadableError 없이 동작
  */
 
 type IfcServerViewerProps = {
