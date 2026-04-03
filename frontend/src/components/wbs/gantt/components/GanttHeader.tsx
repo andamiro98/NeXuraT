@@ -36,7 +36,7 @@ export default function GanttHeader({
         <>
             <div style={{ padding: "16px 24px", backgroundColor: "#fff", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap" }}>
-                    <h2 style={{ fontSize: "1.25rem", fontWeight: "bold", margin: 0 }}>Gantt Chart (SVAR Native)</h2>
+                    <h2 style={{ fontSize: "1.25rem", fontWeight: "bold", margin: 0 }}>NeXura T</h2>
                     <input
                         type="file"
                         accept=".xlsx, .xls, .xlsm"

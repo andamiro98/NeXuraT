@@ -234,7 +234,7 @@ export function useGanttState() {
     );
 
     // CustomTaskEditor에서 전달한 수정값 반영
-    // id에 해당하는 row를 찾아 updates 내용을 덮어쓴 뒤 ganttData를 다시 계산한다.
+    // id에 해당하는 row를 찾아 updates 내용을 덮어쓴 뒤 ganttData를 다시 계산
     const handleUpdateRow = useCallback((id: number, updates: Partial<EditableWbsRow>) => {
         setRows((prev) => {
             const nextRows = prev.map((row) => (row.id === id ? { ...row, ...updates } : row));
@@ -243,7 +243,7 @@ export function useGanttState() {
     }, [rebuildFromRows]);
 
     // 엑셀 업로드 처리
-    // 파일을 읽고, 시트를 파싱하고, 트리 구조를 만든 다음 rows / summary / ganttData를 갱신한다.
+    // 파일을 읽고, 시트를 파싱하고, 트리 구조를 만든 다음 rows / summary / ganttData를 갱신
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;

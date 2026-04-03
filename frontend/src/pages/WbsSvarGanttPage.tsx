@@ -10,6 +10,7 @@ import { useGanttState } from "../components/wbs/gantt/hooks/useGanttState";
 import { useGanttEvents } from "../components/wbs/gantt/hooks/useGanttEvents";
 import { useGanttColumns } from "../components/wbs/gantt/hooks/useGanttColumns";
 import { DEFAULT_SIZE_SETTINGS } from "../components/wbs/gantt/constants";
+import IfcViewerPanel from "../components/viewer/components/IfcViewerPanel.tsx";
 
 export default function WbsSvarGanttPage() {
     /**
@@ -90,6 +91,8 @@ export default function WbsSvarGanttPage() {
                             flexDirection: "column",
                         }}
                     >
+                        <IfcViewerPanel height={460} />
+
                         <GanttHeader
                             onFileUpload={state.handleFileUpload}
                             summary={state.summary}
@@ -104,6 +107,8 @@ export default function WbsSvarGanttPage() {
                             onLevelFilterChange={handleLevelFilterChange}
                             onLevelFilterReset={handleLevelFilterReset}
                         />
+
+                       {/* <IfcViewer />*/}
 
                         <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
                             <Gantt

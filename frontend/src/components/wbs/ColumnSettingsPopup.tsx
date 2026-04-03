@@ -4,7 +4,7 @@ export type ColumnConfig = {
     id: string;
     header: string;
     visible: boolean;
-    width?: number; // 간트 트리그리드에서 사용자가 마우스로 드래그하여 임의 조절한 컬럼 넓이를 지속적으로 기억하기 위한 상태 속성입니다.
+    width?: number; // 간트 트리그리드에서 사용자가 마우스로 드래그하여 임의 조절한 컬럼 넓이를 지속적으로 기억하기 위한 상태 속성
 };
 
 interface ColumnSettingsPopupProps {
