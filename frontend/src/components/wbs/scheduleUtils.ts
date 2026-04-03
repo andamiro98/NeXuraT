@@ -215,17 +215,18 @@ export function buildScheduledGanttData(rows: EditableWbsRow[]): {
             let rel = relTypes[i] || relTypes[0] || ("FS" as RelationType);
             let lag = lagValues[i] ?? lagValues[0] ?? 0;
 
-            // 엑셀에서 간혹 합쳐진 형태 "A100FS+2"처럼 입력되는 임베디드 스트링에 대한 파싱 구조 대비
-            const pattern = /^(.+?)(FS|SS|FF|SF)([+-]\d+)?$/i;
+            {/*엑셀에서 합쳐진 형태 "A100FS+2"처럼 입력되는 임베디드 스트링에 대한 파싱 구조 대비 */}
+            /*const pattern = /^(.+?)(FS|SS|FF|SF)([+-]\d+)?$/i;
             const m = predCode.match(pattern);
             if (m) {
-                code = m[1].trim(); // 1그룹: WBS 코드 
+                code = m[1].trim(); // 1그룹: WBS 코드
                 rel = m[2].toUpperCase() as RelationType; // 2그룹: 관계 연결 타입 (알파벳 강제 대문자화)
                 lag = m[3] ? parseInt(m[3], 10) : 0; // 3그룹: 지연시간 산출 (없는 경우 숫자 0)
-            }
+            }*/
 
             // 코드맵(codeMap) 컬렉션을 통해 선행작업의 문자열 코드 값이 간트 내부 고유 숫자 ID 중에 속하는지 식별
-            const predId = codeMap.get(code);
+            const predId = codeMap.get(code); // 현재 공종(row) WBS의 선행 WBS 코드의 id
+
             // 일반 프로젝트용 타입(FS, SS...)을 SVAR UI 네이티브 간트의 연결 속성 호환 데이터(e2s, s2s...)로 직접 형변환 매칭
             const mappedType = mapRelationType(rel);
 
