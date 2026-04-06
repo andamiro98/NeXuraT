@@ -1,7 +1,6 @@
 /**
  * IFC 업로드/변환/다운로드 API 클라이언트
  *
- * 핵심 원칙:
  *  file.arrayBuffer() 로 IFC 전체를 브라우저 메모리에 올리지 않음
  *  FormData로 서버에 업로드만 하고, 변환된 .frag만 받아서 뷰어에 로드
  */
@@ -101,8 +100,24 @@ export function pollUntilComplete(
  */
 export async function downloadFragAsBuffer(fileId: string): Promise<ArrayBuffer> {
   const res = await fetch(`${API_BASE}/${fileId}/frag`);
-  if (!res.ok) throw new Error(`.frag 다운로드 실패: ${res.status}`);
-  return res.arrayBuffer();
+
+  console.log("content-type =", res.headers.get("content-type"));
+  console.log("content-length =", res.headers.get("content-length"));
+  console.log("status =", res.status);
+
+  if (!res.ok) {
+    const text = await res.text();
+    console.log("error body =", text);
+    throw new Error(`frag 다운로드 실패: ${res.status}`);
+  }
+
+  const fragBuffer = await res.arrayBuffer();
+  const head = Array.from(new Uint8Array(fragBuffer.slice(0, 16)));
+
+  console.log("fragBuffer.byteLength =", fragBuffer.byteLength);
+  console.log("first 16 bytes =", head);
+
+  return fragBuffer;
 }
 
 /**

@@ -4,12 +4,21 @@ import com.kcmc.nexuraT.backend.domain.ifc.dto.ConversionStatusResponse;
 import com.kcmc.nexuraT.backend.domain.ifc.dto.UploadResponse;
 import com.kcmc.nexuraT.backend.domain.ifc.service.IfcFileService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 @RestController
 @RequestMapping("/api/ifc")
@@ -19,7 +28,7 @@ public class IfcFileController {
     private final IfcFileService ifcFileService;
 
     /**
-     * 1단계: IFC 파일 업로드 (스트리밍 저장 — 메모리에 전체를 올리지 않음)
+     * IFC 파일 업로드 (스트리밍 저장 — 메모리에 전체를 올리지 않음)
      */
     @PostMapping("/upload")
     public ResponseEntity<UploadResponse> uploadIfcFile(
@@ -30,7 +39,7 @@ public class IfcFileController {
     }
 
     /**
-     * 2단계: 변환 요청 (업로드된 IFC → .frag)
+     * 변환 요청 (업로드된 IFC → .frag)
      */
     @PostMapping("/{fileId}/convert")
     public ResponseEntity<ConversionStatusResponse> requestConversion(
@@ -41,7 +50,7 @@ public class IfcFileController {
     }
 
     /**
-     * 3단계: 변환 상태 폴링
+     * 변환 상태 폴링
      */
     @GetMapping("/{fileId}/status")
     public ResponseEntity<ConversionStatusResponse> getConversionStatus(
@@ -52,23 +61,27 @@ public class IfcFileController {
     }
 
     /**
-     * 4단계: 변환 완료된 .frag 파일 다운로드
+     * 변환 완료된 .frag 파일
      */
-    @GetMapping("/{fileId}/frag")
-    public ResponseEntity<Resource> downloadFragFile(
-            @PathVariable String fileId) {
+    @GetMapping(value = "/{fileId}/frag", produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    public ResponseEntity<Resource> getFrag(@PathVariable String fileId) throws IOException {
+        Path fragPath = Paths.get("C:/Users/KCMC_BIM/Desktop/dev/nexuraT/ifc-storage/converted", fileId + ".frag");
 
-        Resource resource = ifcFileService.getFragFile(fileId);
+        if (!Files.exists(fragPath)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Resource resource = new InputStreamResource(Files.newInputStream(fragPath));
 
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"" + fileId + ".frag\"")
+                .contentLength(Files.size(fragPath))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fragPath.getFileName() + "\"")
                 .body(resource);
     }
 
     /**
-     * 4-1단계: 분할 변환 시 특정 청크 .frag 다운로드
+     * 분할 변환 시 특정 청크 .frag 다운로드
      */
     @GetMapping("/{fileId}/frag/{chunkIndex}")
     public ResponseEntity<Resource> downloadChunkFragFile(

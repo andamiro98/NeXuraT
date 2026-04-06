@@ -7,13 +7,16 @@
     "dev": "ts-node src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test:large-open": "ts-node src/large-ifc-open-test.ts"
+    "test:large-open": "node --max-old-space-size=16384 --expose-gc -r ts-node/register src/large-ifc-open-test.ts",
+    "test:capacity": "ts-node src/large-ifc-capacity-test.ts"
   },
   "dependencies": {
-    "@thatopen/components": "^2.4.0",
-    "@thatopen/fragments": "^2.4.0",
+    "@thatopen/components": "^3.3.3",
+    "@thatopen/components-front": "^3.3.3",
+    "@thatopen/fragments": "^3.3.7",
     "express": "^4.18.2",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "web-ifc": "^0.0.77"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
