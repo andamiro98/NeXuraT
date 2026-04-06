@@ -24,6 +24,9 @@
  *   --log-step=<MB>      진행 로그 간격 (기본: 128 MB)
  *   --rss-warn=<MB>      Node RSS 경고 임계 (기본: 14336 MB = 14 GB)
  *   --heartbeat=<sec>    내부 처리 중 heartbeat 간격 초 (기본: 30)
+ *
+ *
+ * 실행 : py src/python/split_ifc_streaming.py <IFC 경로> <OUTPUT 경로> 800
  */
 
 import * as fs from "fs";
