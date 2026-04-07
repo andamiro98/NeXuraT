@@ -16,9 +16,12 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.IntStream;
 
 @Slf4j
 @Service
@@ -30,13 +33,8 @@ public class IfcFileService {
 
     private final IfcConversionService conversionService;
 
-    // MVP: 인메모리 관리. 프로덕션에서는 JPA Entity + DB로 전환
     private final Map<String, FileRecord> fileRecords = new ConcurrentHashMap<>();
 
-    /**
-     * IFC 파일을 스트리밍 방식으로 디스크에 저장.
-     * 8MB 버퍼로 읽어 쓰므로 브라우저와 달리 전체를 메모리에 올리지 않는다.
-     */
     public UploadResponse handleUpload(MultipartFile file) {
         String fileId = UUID.randomUUID().toString();
         String originalName = file.getOriginalFilename();
@@ -66,7 +64,7 @@ public class IfcFileService {
 
             fileRecords.put(fileId, record);
 
-            log.info("IFC 업로드 완료: {} ({}MB) path={}",
+            log.info("IFC upload completed: {} ({}MB) path={}",
                     originalName, record.fileSize / (1024 * 1024), record.ifcPath);
 
             return UploadResponse.builder()
@@ -74,125 +72,185 @@ public class IfcFileService {
                     .originalName(originalName)
                     .fileSize(record.fileSize)
                     .status("UPLOADED")
-                    .message("업로드 완료. /convert를 호출하여 변환을 시작하세요.")
+                    .message("Upload completed. Call /convert to start chunked conversion.")
                     .build();
 
         } catch (IOException e) {
-            log.error("파일 업로드 실패", e);
-            throw new RuntimeException("파일 업로드 중 오류 발생: " + e.getMessage());
+            log.error("File upload failed", e);
+            throw new RuntimeException("File upload error: " + e.getMessage());
         }
     }
 
-    /**
-     * Node.js 변환 서비스에 변환 요청
-     */
     public ConversionStatusResponse requestConversion(String fileId) {
         FileRecord record = getRecord(fileId);
 
         if ("CONVERTING".equals(record.status)) {
             return ConversionStatusResponse.builder()
-                    .fileId(fileId).status("CONVERTING")
-                    .message("이미 변환 중입니다.").build();
+                    .fileId(fileId)
+                    .status("CONVERTING")
+                    .message("Conversion is already in progress.")
+                    .build();
         }
 
         if ("COMPLETED".equals(record.status)) {
-            return ConversionStatusResponse.builder()
-                    .fileId(fileId).status("COMPLETED")
-                    .fragDownloadUrl("/api/ifc/" + fileId + "/frag")
-                    .message("이미 변환 완료되었습니다.").build();
+            return buildCompletedStatus(record, "Conversion already completed.");
         }
 
         record.status = "CONVERTING";
+        record.errorMessage = null;
 
-        conversionService.convertAsync(fileId, record.ifcPath, getFragPath(fileId))
-                .thenAccept(success -> {
-                    if (success) {
+        conversionService.convertAsync(fileId, record.ifcPath, getLegacyFragPath(fileId))
+                .thenAccept(result -> {
+                    if (result.isSuccess()) {
+                        applyConversionResult(record, result);
+                        record.errorMessage = null;
                         record.status = "COMPLETED";
-                        record.fragPath = getFragPath(fileId);
-                        log.info("변환 완료: {}", fileId);
+                        log.info("Conversion completed: fileId={}, chunks={}", fileId, record.totalChunks);
                     } else {
                         record.status = "FAILED";
-                        log.error("변환 실패: {}", fileId);
+                        record.errorMessage = result.getErrorMessage();
+                        log.error("Conversion failed: fileId={}, reason={}", fileId, record.errorMessage);
                     }
                 });
 
         return ConversionStatusResponse.builder()
-                .fileId(fileId).status("CONVERTING")
-                .message("변환이 시작되었습니다. /status로 진행 상태를 확인하세요.").build();
+                .fileId(fileId)
+                .status("CONVERTING")
+                .message("Chunked conversion started. Poll /status to track completion.")
+                .build();
     }
 
     public ConversionStatusResponse getConversionStatus(String fileId) {
         FileRecord record = getRecord(fileId);
 
-        ConversionStatusResponse.ConversionStatusResponseBuilder builder =
-                ConversionStatusResponse.builder().fileId(fileId).status(record.status);
-
         if ("COMPLETED".equals(record.status)) {
-            builder.fragDownloadUrl("/api/ifc/" + fileId + "/frag")
-                    .message("변환 완료. .frag 파일을 다운로드할 수 있습니다.");
-        } else if ("FAILED".equals(record.status)) {
-            builder.message("변환에 실패했습니다.");
-        } else {
-            builder.message("변환 진행 중...");
+            return buildCompletedStatus(record, "Conversion completed. Chunked .frag files are ready.");
         }
-        return builder.build();
+
+        if ("FAILED".equals(record.status)) {
+            return ConversionStatusResponse.builder()
+                    .fileId(fileId)
+                    .status("FAILED")
+                    .message(record.errorMessage != null ? record.errorMessage : "Conversion failed.")
+                    .build();
+        }
+
+        return ConversionStatusResponse.builder()
+                .fileId(fileId)
+                .status(record.status)
+                .message("Conversion in progress.")
+                .build();
     }
 
     public Resource getFragFile(String fileId) {
         FileRecord record = getRecord(fileId);
+        ensureCompleted(record);
 
-        if (!"COMPLETED".equals(record.status)) {
-            throw new RuntimeException("변환이 아직 완료되지 않았습니다. 상태: " + record.status);
+        String storedPath = record.fragPath;
+        if (storedPath == null && record.fragFiles != null && !record.fragFiles.isEmpty()) {
+            storedPath = record.fragFiles.get(0);
         }
 
-        // 분할 변환인 경우 첫 번째 .frag 반환
-        if (record.fragFiles != null && !record.fragFiles.isEmpty()) {
-            Path fragPath = Paths.get(record.fragFiles.get(0));
-            if (!Files.exists(fragPath)) {
-                throw new RuntimeException(".frag 파일을 찾을 수 없습니다: " + fragPath);
-            }
-            return new FileSystemResource(fragPath);
-        }
-
-        Path fragPath = Paths.get(record.fragPath);
-        if (!Files.exists(fragPath)) {
-            throw new RuntimeException(".frag 파일을 찾을 수 없습니다: " + fragPath);
-        }
-        return new FileSystemResource(fragPath);
+        return new FileSystemResource(resolveExistingPath(storedPath, ".frag"));
     }
 
     public Resource getFragFileByIndex(String fileId, int chunkIndex) {
         FileRecord record = getRecord(fileId);
-
-        if (!"COMPLETED".equals(record.status)) {
-            throw new RuntimeException("변환이 아직 완료되지 않았습니다. 상태: " + record.status);
-        }
+        ensureCompleted(record);
 
         if (record.fragFiles == null || record.fragFiles.isEmpty()) {
-            throw new RuntimeException("분할 변환 결과가 없습니다: " + fileId);
+            if (chunkIndex == 0 && record.fragPath != null) {
+                return new FileSystemResource(resolveExistingPath(record.fragPath, ".frag"));
+            }
+            throw new RuntimeException("No chunked .frag files exist for fileId=" + fileId);
         }
 
         if (chunkIndex < 0 || chunkIndex >= record.fragFiles.size()) {
-            throw new RuntimeException("청크 인덱스 범위 초과: " + chunkIndex
-                    + " (전체: " + record.fragFiles.size() + ")");
+            throw new RuntimeException("Chunk index out of range: " + chunkIndex
+                    + " (total: " + record.fragFiles.size() + ")");
         }
 
-        Path fragPath = Paths.get(record.fragFiles.get(chunkIndex));
-        if (!Files.exists(fragPath)) {
-            throw new RuntimeException(".frag 파일을 찾을 수 없습니다: " + fragPath);
+        return new FileSystemResource(resolveExistingPath(record.fragFiles.get(chunkIndex), ".frag"));
+    }
+
+    public Resource getManifestFile(String fileId) {
+        FileRecord record = getRecord(fileId);
+        ensureCompleted(record);
+        return new FileSystemResource(resolveExistingPath(record.manifestPath, "manifest"));
+    }
+
+    private ConversionStatusResponse buildCompletedStatus(FileRecord record, String message) {
+        ConversionStatusResponse.ConversionStatusResponseBuilder builder = ConversionStatusResponse.builder()
+                .fileId(record.fileId)
+                .status("COMPLETED")
+                .message(message)
+                .manifestUrl(record.manifestPath == null ? null : "/api/ifc/" + record.fileId + "/manifest")
+                .totalChunks(record.totalChunks);
+
+        if (record.fragPath != null || (record.fragFiles != null && !record.fragFiles.isEmpty())) {
+            builder.fragDownloadUrl("/api/ifc/" + record.fileId + "/frag");
         }
-        return new FileSystemResource(fragPath);
+
+        if (record.fragFiles != null && !record.fragFiles.isEmpty()) {
+            builder.fragDownloadUrls(
+                    IntStream.range(0, record.fragFiles.size())
+                            .mapToObj(i -> "/api/ifc/" + record.fileId + "/frag/" + i)
+                            .toList()
+            );
+        } else if (record.fragPath != null) {
+            builder.fragDownloadUrls(Collections.singletonList("/api/ifc/" + record.fileId + "/frag"));
+            builder.totalChunks(1);
+        }
+
+        return builder.build();
+    }
+
+    private void applyConversionResult(FileRecord record, IfcConversionService.ConversionResult result) {
+        List<String> fragFiles = result.getFragFiles();
+        if (fragFiles == null || fragFiles.isEmpty()) {
+            fragFiles = result.getFragPath() == null
+                    ? Collections.emptyList()
+                    : Collections.singletonList(result.getFragPath());
+        }
+
+        record.fragFiles = fragFiles;
+        record.fragPath = result.getFragPath() != null
+                ? result.getFragPath()
+                : (fragFiles.isEmpty() ? null : fragFiles.get(0));
+        record.manifestPath = result.getManifestPath();
+        record.totalChunks = result.getTotalChunks() != null
+                ? result.getTotalChunks()
+                : (fragFiles.isEmpty() ? null : fragFiles.size());
+        record.errorMessage = null;
+    }
+
+    private void ensureCompleted(FileRecord record) {
+        if (!"COMPLETED".equals(record.status)) {
+            throw new RuntimeException("Conversion is not completed yet. Current status: " + record.status);
+        }
+    }
+
+    private Path resolveExistingPath(String storedPath, String label) {
+        if (storedPath == null || storedPath.isBlank()) {
+            throw new RuntimeException(label + " path is empty.");
+        }
+
+        Path resolvedPath = Paths.get(storedPath).toAbsolutePath().normalize();
+        if (!Files.exists(resolvedPath)) {
+            throw new RuntimeException(label + " file not found: " + resolvedPath);
+        }
+        return resolvedPath;
     }
 
     private FileRecord getRecord(String fileId) {
         FileRecord record = fileRecords.get(fileId);
         if (record == null) {
-            throw new RuntimeException("파일을 찾을 수 없습니다: " + fileId);
+            throw new RuntimeException("File not found: " + fileId);
         }
         return record;
     }
 
-    private String getFragPath(String fileId) {
+    private String getLegacyFragPath(String fileId) {
         return Paths.get(basePath)
                 .toAbsolutePath()
                 .normalize()
@@ -208,6 +266,9 @@ public class IfcFileService {
         String status;
         String ifcPath;
         String fragPath;
-        java.util.List<String> fragFiles;  // 분할 변환 시 여러 .frag 경로
+        String manifestPath;
+        Integer totalChunks;
+        List<String> fragFiles;
+        String errorMessage;
     }
 }

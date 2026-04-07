@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -14,7 +16,9 @@ public class ConversionStatusResponse {
     private String fileId;
     private String status;
     private String fragDownloadUrl;
+    private List<String> fragDownloadUrls;
+    private String manifestUrl;
+    private Integer totalChunks;
     private String message;
     private Integer progressPercent;
-    private java.util.List<String> fragDownloadUrls; // 분할 변환 시 여러 .frag URL
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import * as OBC from "@thatopen/components";
 import * as THREE from "three";
 import {
@@ -6,6 +6,7 @@ import {
   requestConversion,
   pollUntilComplete,
   downloadFragAsBuffer,
+  downloadChunkFragAsBuffer,
   type ConversionStatusResponse,
 } from "../../../api/ifcApi";
 
@@ -22,7 +23,7 @@ type Phase =
     | "done"
     | "error";
 
-const MAX_IFC_SIZE_BYTES = 2 * 1024 * 1024 * 1024; // 2 GiB
+const MAX_IFC_SIZE_BYTES = 10 * 1024 * 1024 * 1024; // 10 GiB
 
 function isIfcFile(file: File) {
   return file.name.toLowerCase().endsWith(".ifc");
@@ -39,30 +40,16 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-async function waitForModelRef(
-    modelRef: React.MutableRefObject<any>,
-    timeoutMs = 10000
-): Promise<any> {
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < timeoutMs) {
-    if (modelRef.current) return modelRef.current;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-
-  throw new Error("로드된 모델을 뷰어에서 찾지 못했습니다.");
-}
-
-export default function IfcServerViewer({height = "100vh",}: IfcServerViewerProps) {
+export default function IfcServerViewer({ height = "100vh" }: IfcServerViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const componentsRef = useRef<OBC.Components | null>(null);
   const worldRef = useRef<any>(null);
   const fragmentsRef = useRef<any>(null);
-  const currentModelRef = useRef<any>(null);
+  const currentModelIdsRef = useRef<string[]>([]);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [status, setStatus] = useState("대기 중");
+  const [status, setStatus] = useState("Ready");
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -95,7 +82,7 @@ export default function IfcServerViewer({height = "100vh",}: IfcServerViewerProp
     const fragments = components.get(OBC.FragmentsManager);
     fragmentsRef.current = fragments;
 
-    const workerUrl = "/thatopen/worker.mjs?v=20260403";
+    const workerUrl = "/thatopen/worker.mjs?v=20260406";
     fragments.init(workerUrl);
 
     world.camera.controls.addEventListener("update", () => {
@@ -105,18 +92,19 @@ export default function IfcServerViewer({height = "100vh",}: IfcServerViewerProp
     fragments.list.onItemSet.add(({ value: model }: any) => {
       try {
         if (!model?.object) {
-          console.warn("[IFC Viewer] 로드된 모델 object가 없습니다.", model);
+          console.warn("[IFC Viewer] Loaded model has no object.", model);
           return;
         }
 
         model.useCamera(world.camera.three);
-        world.scene.three.add(model.object);
-        currentModelRef.current = model;
-        fragments.core.update(true);
 
-        console.log("[IFC Viewer] model added to scene:", model.modelId);
+        if (model.object.parent !== world.scene.three) {
+          world.scene.three.add(model.object);
+        }
+
+        fragments.core.update(true);
       } catch (sceneError) {
-        console.error("[IFC Viewer] scene 추가 중 오류:", sceneError);
+        console.error("[IFC Viewer] Failed to add model to scene:", sceneError);
       }
     });
 
@@ -124,7 +112,7 @@ export default function IfcServerViewer({height = "100vh",}: IfcServerViewerProp
       try {
         components.dispose();
       } finally {
-        currentModelRef.current = null;
+        currentModelIdsRef.current = [];
         worldRef.current = null;
         fragmentsRef.current = null;
         componentsRef.current = null;
@@ -134,23 +122,28 @@ export default function IfcServerViewer({height = "100vh",}: IfcServerViewerProp
 
   const clearCurrentModel = useCallback(async () => {
     const fragments = fragmentsRef.current;
-    const model = currentModelRef.current;
 
-    if (!fragments || !model) return;
-
-    try {
-      const modelId = model.modelId;
-      if (modelId) {
-        await fragments.core.disposeModel(modelId);
-      }
-    } catch (disposeError) {
-      console.warn("[IFC Viewer] 기존 모델 제거 중 경고:", disposeError);
-    } finally {
-      currentModelRef.current = null;
+    if (!fragments) {
+      currentModelIdsRef.current = [];
+      return;
     }
+
+    const modelIds = currentModelIdsRef.current.length > 0
+      ? [...currentModelIdsRef.current]
+      : Array.from(fragments.list.keys());
+
+    for (const modelId of modelIds) {
+      try {
+        await fragments.core.disposeModel(modelId);
+      } catch (disposeError) {
+        console.warn("[IFC Viewer] Failed to dispose model:", modelId, disposeError);
+      }
+    }
+
+    currentModelIdsRef.current = [];
   }, []);
 
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -158,20 +151,18 @@ export default function IfcServerViewer({height = "100vh",}: IfcServerViewerProp
 
     if (!isIfcFile(file)) {
       setSelectedFile(null);
-      setError("IFC 파일만 업로드할 수 있습니다.");
+      setError("Only IFC files can be uploaded.");
       setPhase("error");
-      setStatus("파일 형식 오류");
+      setStatus("Invalid file type");
       e.target.value = "";
       return;
     }
 
     if (!isAllowedSize(file)) {
       setSelectedFile(null);
-      setError(
-          `2GB 이하 IFC 파일만 업로드할 수 있습니다. 선택한 파일 크기: ${formatSize(file.size)}`
-      );
+      setError(`This viewer currently accepts IFC files up to ${formatSize(MAX_IFC_SIZE_BYTES)}.`);
       setPhase("error");
-      setStatus("파일 크기 초과");
+      setStatus("File too large");
       e.target.value = "";
       return;
     }
@@ -179,7 +170,7 @@ export default function IfcServerViewer({height = "100vh",}: IfcServerViewerProp
     setSelectedFile(file);
     setError(null);
     setPhase("idle");
-    setStatus(`파일 선택됨: ${file.name} (${formatSize(file.size)})`);
+    setStatus(`Selected: ${file.name} (${formatSize(file.size)})`);
   }, []);
 
   const handleUploadAndConvert = useCallback(async () => {
@@ -189,17 +180,15 @@ export default function IfcServerViewer({height = "100vh",}: IfcServerViewerProp
 
     if (!isIfcFile(selectedFile)) {
       setPhase("error");
-      setError("IFC 파일만 업로드할 수 있습니다.");
-      setStatus("파일 형식 오류");
+      setError("Only IFC files can be uploaded.");
+      setStatus("Invalid file type");
       return;
     }
 
     if (!isAllowedSize(selectedFile)) {
       setPhase("error");
-      setError(
-          `2GB 이하 IFC 파일만 업로드할 수 있습니다. 현재 파일 크기: ${formatSize(selectedFile.size)}`
-      );
-      setStatus("파일 크기 초과");
+      setError(`This viewer currently accepts IFC files up to ${formatSize(MAX_IFC_SIZE_BYTES)}.`);
+      setStatus("File too large");
       return;
     }
 
@@ -211,80 +200,121 @@ export default function IfcServerViewer({height = "100vh",}: IfcServerViewerProp
 
     try {
       await clearCurrentModel();
+      currentModelIdsRef.current = [];
 
       setPhase("uploading");
-      setStatus("서버에 IFC 업로드 중...");
+      setStatus("Uploading IFC to the server...");
 
       const uploadResult = await uploadIfcFile(selectedFile, (percent) => {
         setUploadProgress(percent);
-        setStatus(`업로드 중... ${percent}%`);
+        setStatus(`Uploading... ${percent}%`);
       });
 
       setPhase("converting");
-      setStatus("서버에서 IFC → .frag 변환 요청 중...");
+      setStatus("Requesting chunked IFC -> frag conversion...");
       await requestConversion(uploadResult.fileId);
 
-      setStatus("서버에서 변환 중...");
+      setStatus("Server is converting IFC chunks...");
 
-      await new Promise<void>((resolve, reject) => {
-        pollUntilComplete(uploadResult.fileId, (convStatus: ConversionStatusResponse) => {
+      const completedStatus = await new Promise<ConversionStatusResponse>((resolve, reject) => {
+        let settled = false;
+        const poller = pollUntilComplete(uploadResult.fileId, (convStatus: ConversionStatusResponse) => {
+          if (settled) return;
+
           if (typeof convStatus.progressPercent === "number") {
-            setStatus(`변환 중... ${convStatus.progressPercent}%`);
+            setStatus(`Converting... ${convStatus.progressPercent}%`);
           }
 
           if (convStatus.status === "COMPLETED") {
-            resolve();
+            settled = true;
+            poller.cancel();
+            resolve(convStatus);
           } else if (convStatus.status === "FAILED") {
-            reject(new Error(convStatus.message || "변환 실패"));
+            settled = true;
+            poller.cancel();
+            reject(new Error(convStatus.message || "Conversion failed"));
           }
         });
       });
 
-      setPhase("downloading");
-      setStatus(".frag 바이너리 수신 중...");
-      const fragBuffer = await downloadFragAsBuffer(uploadResult.fileId);
+      const totalChunks =
+        completedStatus.totalChunks ??
+        completedStatus.fragDownloadUrls?.length ??
+        1;
+      const isChunked = totalChunks > 1;
+      const loadedModelIds: string[] = [];
 
-      if (!fragBuffer || fragBuffer.byteLength === 0) {
-        throw new Error(".frag 데이터를 받지 못했습니다.");
+      for (let i = 0; i < totalChunks; i++) {
+        setPhase("downloading");
+        setStatus(
+            isChunked
+              ? `.frag chunk download ${i + 1}/${totalChunks}...`
+              : "Downloading .frag..."
+        );
+
+        const fragBuffer = isChunked
+          ? await downloadChunkFragAsBuffer(uploadResult.fileId, i)
+          : await downloadFragAsBuffer(uploadResult.fileId);
+
+        if (!fragBuffer || fragBuffer.byteLength === 0) {
+          throw new Error(`No data received for frag chunk ${i + 1}.`);
+        }
+
+        const fragBytes = new Uint8Array(fragBuffer);
+
+        setPhase("loading");
+        setStatus(
+            isChunked
+              ? `Loading chunk ${i + 1}/${totalChunks} into the viewer...`
+              : "Loading model into the viewer..."
+        );
+
+        const modelId = isChunked
+          ? `${selectedFile.name}-${uploadResult.fileId}-chunk-${i + 1}`
+          : `${selectedFile.name}-${uploadResult.fileId}`;
+
+        try {
+          await fragments.core.load(fragBytes, { modelId });
+          await fragments.core.update(true);
+        } catch (chunkLoadError: any) {
+          throw new Error(
+            isChunked
+              ? `Failed to load frag chunk ${i + 1}/${totalChunks}: ${chunkLoadError?.message || chunkLoadError}`
+              : `Failed to load frag model: ${chunkLoadError?.message || chunkLoadError}`
+          );
+        }
+
+        loadedModelIds.push(modelId);
+        currentModelIdsRef.current = [...loadedModelIds];
       }
 
-      console.log("[IFC Viewer] fragBuffer.byteLength =", fragBuffer.byteLength);
-
-      setPhase("loading");
-      setStatus("3D 모델 로딩 중...");
-
-      currentModelRef.current = null;
-
-      // 중요: ArrayBuffer 그대로 전달
-      await fragments.core.load(fragBuffer, {
-        modelId: `${selectedFile.name}-${uploadResult.fileId}`,
-      });
-
-      await fragments.core.update(true);
-
-      const loadedModel = await waitForModelRef(currentModelRef, 10000);
-
-      if (!loadedModel?.object) {
-        throw new Error("로드된 모델 object를 찾지 못했습니다.");
+      if (loadedModelIds.length === 0) {
+        throw new Error("No models were loaded into the viewer.");
       }
 
-      if (world.camera?.controls) {
-        const box = new THREE.Box3().setFromObject(loadedModel.object);
-
-        if (!box.isEmpty()) {
-          await world.camera.controls.fitToBox(box, true);
-        } else {
-          console.warn("[IFC Viewer] 모델 bounding box가 비어 있습니다.");
+      const box = new THREE.Box3();
+      for (const modelId of loadedModelIds) {
+        const model = fragments.list.get(modelId);
+        if (model?.object) {
+          box.expandByObject(model.object);
         }
       }
 
+      if (world.camera?.controls && !box.isEmpty()) {
+        await world.camera.controls.fitToBox(box, true);
+      }
+
       setPhase("done");
-      setStatus("완료! 모델이 뷰어에 표시되었습니다.");
+      setStatus(
+          isChunked
+            ? `Complete! ${loadedModelIds.length} frag chunks loaded.`
+            : "Complete! Model loaded into the viewer."
+      );
     } catch (err: any) {
-      console.error("[IFC Viewer] 처리 오류:", err);
+      console.error("[IFC Viewer] Processing error:", err);
       setPhase("error");
-      setError(err?.message || "처리 중 오류가 발생했습니다.");
-      setStatus("오류 발생");
+      setError(err?.message || "An error occurred while processing the IFC file.");
+      setStatus("Error");
     }
   }, [clearCurrentModel, selectedFile]);
 
@@ -301,7 +331,7 @@ export default function IfcServerViewer({height = "100vh",}: IfcServerViewerProp
             }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <strong style={{ fontSize: 15 }}>IFC Viewer (서버 단일 변환)</strong>
+            <strong style={{ fontSize: 15 }}>IFC Viewer (Server Chunk Conversion)</strong>
 
             <input
                 type="file"
@@ -322,14 +352,14 @@ export default function IfcServerViewer({height = "100vh",}: IfcServerViewerProp
                   cursor: !selectedFile || isProcessing ? "not-allowed" : "pointer",
                 }}
             >
-              {isProcessing ? "처리 중..." : "업로드 & 변환"}
+              {isProcessing ? "Processing..." : "Upload & Convert"}
             </button>
 
             <span style={{ fontSize: 13, color: "#6b7280" }}>{status}</span>
           </div>
 
           <div style={{ fontSize: 12, color: "#6b7280" }}>
-            현재 정책: 2GB 이하 IFC만 허용 / 서버 단일 변환 / 단일 .frag만 로드 / 사용자 다운로드 불필요
+            {"Current flow: upload IFC -> server chunk split -> chunked .frag conversion -> sequential viewer load"}
           </div>
 
           {phase === "uploading" && uploadProgress > 0 && uploadProgress < 100 && (

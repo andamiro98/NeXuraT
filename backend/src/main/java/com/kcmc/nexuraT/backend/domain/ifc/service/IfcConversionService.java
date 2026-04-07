@@ -1,8 +1,17 @@
 package com.kcmc.nexuraT.backend.domain.ifc.service;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -10,18 +19,13 @@ import org.springframework.web.client.RestTemplate;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
-/**
- * IFC → .frag 변환 서비스.
- *
- * 구조:
- *   Spring Boot → HTTP → Node.js 변환 서버 (localhost:3001)
- *
- * 추후 Electron 확장 시:
- *   converter.ts 의 convertIfcToFrag()를 직접 import하여 사용 (HTTP 불필요)
- */
 @Slf4j
 @Service
 public class IfcConversionService {
@@ -29,10 +33,26 @@ public class IfcConversionService {
     @Value("${ifc.converter.url:http://localhost:3001}")
     private String converterBaseUrl;
 
+    @Value("${ifc.converter.chunk-target-mb:800}")
+    private int chunkTargetMb;
+
     private final RestTemplate restTemplate = new RestTemplate();
 
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ConversionResult {
+        private boolean success;
+        private String fragPath;
+        private List<String> fragFiles;
+        private String manifestPath;
+        private Integer totalChunks;
+        private String errorMessage;
+    }
+
     @Async
-    public CompletableFuture<Boolean> convertAsync(
+    public CompletableFuture<ConversionResult> convertAsync(
             String fileId, String ifcPath, String fragPath) {
 
         try {
@@ -44,46 +64,94 @@ public class IfcConversionService {
 
             String url = converterBaseUrl + "/convert";
 
-            Map<String, String> requestBody = new HashMap<>();
+            Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("fileId", fileId);
             requestBody.put("ifcPath", resolvedIfcPath.toString());
             requestBody.put("fragPath", resolvedFragPath.toString());
+            requestBody.put("chunkTargetMb", chunkTargetMb);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
-            HttpEntity<Map<String, String>> entity = new HttpEntity<>(requestBody, headers);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
-            log.info("Node.js 변환 서버에 요청: fileId={}, ifcPath={}, fragPath={}",
-                    fileId, resolvedIfcPath, resolvedFragPath);
+            log.info("Node.js converter request: fileId={}, ifcPath={}, fragPath={}, chunkTargetMb={}",
+                    fileId, resolvedIfcPath, resolvedFragPath, chunkTargetMb);
 
             ResponseEntity<Map> response = restTemplate.exchange(
                     url, HttpMethod.POST, entity, Map.class);
 
             if (response.getStatusCode() == HttpStatus.OK) {
                 Map body = response.getBody();
-                boolean success = body != null && "COMPLETED".equals(body.get("status"));
+                boolean success = body != null && "COMPLETED".equals(String.valueOf(body.get("status")));
 
-                // 분할 변환인 경우 fragFiles 목록 저장
-                if (body != null && body.containsKey("fragFiles")) {
-                    List<String> fragFilesList = (List<String>) body.get("fragFiles");
-                    if (fragFilesList != null && !fragFilesList.isEmpty()) {
-                        log.info("분할 변환 결과: {}개 .frag 파일", fragFilesList.size());
-                        // CompletableFuture에 fragFiles 정보를 전달하기 위해
-                        // 별도 콜백에서 처리 (IfcFileService에서 참조)
-                        return CompletableFuture.completedFuture(success);
-                    }
-                }
+                ConversionResult result = ConversionResult.builder()
+                        .success(success)
+                        .fragPath(asString(body, "fragPath"))
+                        .fragFiles(asStringList(body, "fragFiles"))
+                        .manifestPath(asString(body, "manifestPath"))
+                        .totalChunks(asInteger(body, "totalChunks"))
+                        .errorMessage(asString(body, "message"))
+                        .build();
 
-                log.info("변환 결과: fileId={}, success={}", fileId, success);
-                return CompletableFuture.completedFuture(success);
+                log.info("Conversion result: fileId={}, success={}, totalChunks={}",
+                        fileId, result.isSuccess(), result.getTotalChunks());
+
+                return CompletableFuture.completedFuture(result);
             }
 
-            return CompletableFuture.completedFuture(false);
+            return CompletableFuture.completedFuture(
+                    ConversionResult.builder()
+                            .success(false)
+                            .errorMessage("Converter returned a non-OK response.")
+                            .build()
+            );
 
         } catch (Exception e) {
-            log.error("변환 요청 실패: fileId={}", fileId, e);
-            return CompletableFuture.completedFuture(false);
+            log.error("Conversion request failed: fileId={}", fileId, e);
+            return CompletableFuture.completedFuture(
+                    ConversionResult.builder()
+                            .success(false)
+                            .errorMessage(e.getMessage())
+                            .build()
+            );
         }
+    }
+
+    private String asString(Map body, String key) {
+        if (body == null) {
+            return null;
+        }
+        Object value = body.get(key);
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private Integer asInteger(Map body, String key) {
+        if (body == null) {
+            return null;
+        }
+        Object value = body.get(key);
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value == null) {
+            return null;
+        }
+        return Integer.parseInt(String.valueOf(value));
+    }
+
+    private List<String> asStringList(Map body, String key) {
+        if (body == null) {
+            return Collections.emptyList();
+        }
+
+        Object value = body.get(key);
+        if (!(value instanceof List<?> list)) {
+            return Collections.emptyList();
+        }
+
+        return list.stream()
+                .map(String::valueOf)
+                .collect(Collectors.toList());
     }
 }

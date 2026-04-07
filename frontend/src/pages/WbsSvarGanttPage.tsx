@@ -109,8 +109,7 @@ export default function WbsSvarGanttPage() {
                             onLevelFilterReset={handleLevelFilterReset}
                         />
 
-                       {/* <IfcViewer />*/}
-
+                        {/* <IfcViewer />*/}
                         <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
                             <Gantt
                                 key={Array.from(state.levelFilter).sort().join(",")}

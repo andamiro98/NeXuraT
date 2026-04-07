@@ -295,7 +295,7 @@ export default function IfcViewerPanel({ height = 360 }: IfcViewerPanelProps) {
 
             const fragments = components.get(OBC.FragmentsManager);
 
-            const workerUrl = new URL("./thatopen/worker.mjs", window.location.href).toString();
+            const workerUrl = new URL("./thatopen/worker.mjs?v=20260406", window.location.href).toString();
             const wasmPath = new URL("./thatopen/", window.location.href).toString();
 
             fragments.init(workerUrl);
